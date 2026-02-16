@@ -1,0 +1,166 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  
+  /* TradePilot Color System — Charcoal gray (neutral, no blue bias) */
+  --tp-bg-base: #14161C;
+  --tp-bg-panel: #1A1D25;
+  --tp-bg-divider: #242830;
+  
+  --tp-text-primary: #E6E9F0;
+  --tp-text-secondary: #9AA1B2;
+  
+  --tp-bullish: #3FAE7A;
+  --tp-bearish: #D66565;
+  --tp-neutral: #6F7A90;
+  --tp-highlight: #4C6FFF;
+  
+  /* Standard theme tokens */
+  --background: #14161C;
+  --foreground: #E6E9F0;
+  --card: #1A1D25;
+  --card-foreground: #E6E9F0;
+  --popover: #1A1D25;
+  --popover-foreground: #E6E9F0;
+  --primary: #4C6FFF;
+  --primary-foreground: #E6E9F0;
+  --secondary: #242830;
+  --secondary-foreground: #E6E9F0;
+  --muted: #242830;
+  --muted-foreground: #9AA1B2;
+  --accent: #242830;
+  --accent-foreground: #E6E9F0;
+  --destructive: #D66565;
+  --destructive-foreground: #E6E9F0;
+  --border: #242830;
+  --input: #242830;
+  --input-background: #1A1D25;
+  --switch-background: #242830;
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --ring: #4C6FFF;
+  --chart-1: #4C6FFF;
+  --chart-2: #3FAE7A;
+  --chart-3: #D66565;
+  --chart-4: #6F7A90;
+  --chart-5: #9AA1B2;
+  --radius: 0.5rem;
+  --sidebar: #14161C;
+  --sidebar-foreground: #E6E9F0;
+  --sidebar-primary: #4C6FFF;
+  --sidebar-primary-foreground: #E6E9F0;
+  --sidebar-accent: #1A1D25;
+  --sidebar-accent-foreground: #E6E9F0;
+  --sidebar-border: #242830;
+  --sidebar-ring: #4C6FFF;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  
+  /* TradePilot custom colors */
+  --color-tp-bg-base: var(--tp-bg-base);
+  --color-tp-bg-panel: var(--tp-bg-panel);
+  --color-tp-bg-divider: var(--tp-bg-divider);
+  --color-tp-text-primary: var(--tp-text-primary);
+  --color-tp-text-secondary: var(--tp-text-secondary);
+  --color-tp-bullish: var(--tp-bullish);
+  --color-tp-bearish: var(--tp-bearish);
+  --color-tp-neutral: var(--tp-neutral);
+  --color-tp-highlight: var(--tp-highlight);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-[#14161C] text-[#E6E9F0];
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro', 'Segoe UI', sans-serif;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}

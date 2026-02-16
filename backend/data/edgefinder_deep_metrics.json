@@ -1,0 +1,74 @@
+{
+    "XAUUSD": {
+        "technical": {
+            "seasonality_10y": "Bullish",
+            "trend_4h_d": "Bullish"
+        },
+        "cot": {
+            "net_positioning": "Bullish",
+            "weekly_change": "Bullish"
+        },
+        "retail": {
+            "sentiment_pct": 74.0,
+            "bias": "Contrarian Bullish"
+        },
+        "fundamental": {
+            "eco_growth": {
+                "gdp": "Bullish",
+                "pmi_m": "Bullish",
+                "pmi_s": "Bullish",
+                "retail_sales": "Bullish",
+                "consumer_conf": "Bearish"
+            },
+            "jobs_market": {
+                "nfp": "Bearish",
+                "unemployment_rate": "Bullish",
+                "jobless_claims": "Bearish",
+                "jolts": "Bearish",
+                "adp": "Bearish"
+            },
+            "inflation": {
+                "cpi": "Neutral",
+                "ppi": "Bearish",
+                "pce": "Neutral",
+                "interest_rates": "Bullish"
+            }
+        }
+    },
+    "SPX500": {
+        "technical": {
+            "seasonality_10y": "Bearish",
+            "trend_4h_d": "Bearish"
+        },
+        "cot": {
+            "net_positioning": "Bearish",
+            "weekly_change": "Bearish"
+        },
+        "retail": {
+            "sentiment_pct": 52.0,
+            "bias": "Mixed"
+        },
+        "fundamental": {
+            "eco_growth": {
+                "gdp": "Bullish",
+                "pmi_m": "Bullish",
+                "pmi_s": "Bullish",
+                "retail_sales": "Bullish",
+                "consumer_conf": "Bearish"
+            },
+            "jobs_market": {
+                "nfp": "Bearish",
+                "unemployment_rate": "Bullish",
+                "jobless_claims": "Bearish",
+                "jolts": "Bearish",
+                "adp": "Bearish"
+            },
+            "inflation": {
+                "cpi": "Neutral",
+                "ppi": "Bearish",
+                "pce": "Neutral",
+                "interest_rates": "Bullish"
+            }
+        }
+    }
+}

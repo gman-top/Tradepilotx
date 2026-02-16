@@ -1,0 +1,32 @@
+{
+    "GOLD": {
+        "cot_score": 1,
+        "retail_score": 1,
+        "macro_score": 2,
+        "status": "Institutional Buying"
+    },
+    "EURUSD": {
+        "cot_score": -1,
+        "retail_score": 0,
+        "macro_score": -1,
+        "status": "USD Strength"
+    },
+    "USOIL": {
+        "cot_score": 1,
+        "retail_score": 1,
+        "macro_score": 2,
+        "status": "Supply Constraints"
+    },
+    "USDJPY": {
+        "cot_score": -2,
+        "retail_score": -1,
+        "macro_score": -2,
+        "status": "Carry Trade Unwind"
+    },
+    "SPX500": {
+        "cot_score": -1,
+        "retail_score": 0,
+        "macro_score": 3,
+        "status": "Tech Momentum"
+    }
+}

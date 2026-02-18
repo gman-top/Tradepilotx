@@ -474,7 +474,7 @@ export default function Assets() {
               </div>
             </div>
 
-            {/* Bias Breakdown Table (EdgeFinder Style) */}
+            {/* Bias Breakdown Table (NYX Style) */}
             <div className="bg-[#141823] rounded-lg p-6 border border-[#1E2433] mb-6">
               <h2 className="text-xl mb-4">Bias Breakdown</h2>
               <div className="overflow-x-auto">

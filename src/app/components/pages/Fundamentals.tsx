@@ -499,7 +499,7 @@ export default function Fundamentals() {
         })}
       </div>
 
-      {/* Expandable Categories with EdgeFinder-Style Tables */}
+      {/* Expandable Categories with NYX-Style Tables */}
       <div className="space-y-4">
         {(Object.keys(categories) as Category[]).map((category) => {
           const isExpanded = expandedCategory === category;
@@ -528,7 +528,7 @@ export default function Fundamentals() {
                 )}
               </button>
 
-              {/* Category Content - EdgeFinder-Style Table */}
+              {/* Category Content - NYX-Style Table */}
               {isExpanded && (
                 <div className="border-t border-[#1E2433]">
                   <div className="overflow-x-auto">

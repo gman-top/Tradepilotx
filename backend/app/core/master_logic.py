@@ -15,12 +15,25 @@ class MasterLogicEngine:
     def __init__(self):
         self.cot = COTFetcher()
         self.intel = RealTimeIntelligence()
-        self.cot_data = self.cot.fetch_latest_cot()
-        self.sentiment_data = self.intel.get_myfxbook_sentiment()
+        try:
+            self.cot_data = self.cot.fetch_latest_cot() or {}
+        except:
+            self.cot_data = {}
+        try:
+            self.sentiment_data = self.intel.get_myfxbook_sentiment() or {}
+        except:
+            self.sentiment_data = {}
 
     def get_real_trade_analysis(self, ticker: str, asset_name: str) -> Dict[str, Any]:
         # 1. LIVE TECHNICALS
         df = yf.download(ticker, period="1y", interval="1d", progress=False)
+        if df.empty:
+            raise ValueError(f"No data available for {ticker}")
+        
+        # Handle MultiIndex columns from yfinance
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        
         curr_price = float(df['Close'].iloc[-1])
         sma50 = float(df['Close'].rolling(50).mean().iloc[-1])
         sma200 = float(df['Close'].rolling(200).mean().iloc[-1])

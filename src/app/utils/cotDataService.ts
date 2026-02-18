@@ -20,8 +20,8 @@ import {
 
 export { CFTC_MARKET_PATTERNS, COT_AVAILABLE_SYMBOLS };
 
-// NYX Backend Base URL (Railway Production)
-const NYX_API_BASE = "https://tradepilot-backend-production.up.railway.app/api/v1";
+// CLOUDFLARE LIVE TUNNEL (Real Data)
+const NYX_API_BASE = "https://associated-awards-entries-asset.trycloudflare.com/api/v1";
 
 export interface CFTCRawRow {
   symbol: string;

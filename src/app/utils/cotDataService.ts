@@ -21,7 +21,7 @@ import {
 export { CFTC_MARKET_PATTERNS, COT_AVAILABLE_SYMBOLS };
 
 // CLOUDFLARE LIVE TUNNEL (Real Data)
-const NYX_API_BASE = "https://associated-awards-entries-asset.trycloudflare.com/api/v1";
+const NYX_API_BASE = "https://reality-little-regime-motherboard.trycloudflare.com/api/v1";
 
 export interface CFTCRawRow {
   symbol: string;

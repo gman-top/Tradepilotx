@@ -20,28 +20,19 @@ import {
 
 export { CFTC_MARKET_PATTERNS, COT_AVAILABLE_SYMBOLS };
 
-// NYX Backend Base URL (Port 3345)
-// Using window.location.hostname to support both local and tunneled access
-const NYX_API_BASE = `http://${window.location.hostname}:3345/api`;
+// NYX Backend Base URL (Railway Production)
+const NYX_API_BASE = "https://tradepilot-backend-production.up.railway.app/api/v1";
 
 export interface CFTCRawRow {
-  market_and_exchange_names: string;
-  report_date_as_yyyy_mm_dd: string;
-  open_interest_all: string;
-  noncomm_positions_long_all: string;
-  noncomm_positions_short_all: string;
-  noncomm_positions_spreading_all: string;
-  comm_positions_long_all: string;
-  comm_positions_short_all: string;
-  nonrept_positions_long_all: string;
-  nonrept_positions_short_all: string;
-  change_in_open_interest_all: string;
-  change_in_noncomm_long_all: string;
-  change_in_noncomm_short_all: string;
-  change_in_comm_long_all: string;
-  change_in_comm_short_all: string;
-  change_in_nonrept_long_all: string;
-  change_in_nonrept_short_all: string;
+  symbol: string;
+  price: number;
+  bias: string;
+  score: number;
+  breakdown: {
+    technical: { score: number; status: string };
+    institutional: { score: number; net_long: number };
+    retail: { score: number; long_pct: number };
+  };
 }
 
 type TraderType = 'Non-Commercials' | 'Commercials' | 'Retail' | 'All';
@@ -150,76 +141,31 @@ export async function fetchAssetHistory(
   }
 }
 
-/**
- * NYX BACKEND INTEGRATION: Batch Latest
- */
 export async function fetchAllAssetsLatest(
   traderType: TraderType
 ): Promise<{ data: COTLatestRowLive[]; source: 'live' | 'partial' | 'error'; reportDate: string }> {
-  const cacheKey = buildAllAssetsCacheKey(traderType);
-  const cached = dataCache.get<{ data: COTLatestRowLive[]; reportDate: string }>(cacheKey);
-  if (cached) return { ...cached, source: 'live' };
-
   try {
-    const response = await fetch(`${NYX_API_BASE}/cftc/batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ traderType }),
-    });
-
+    const response = await fetch(`${NYX_API_BASE}/market`);
     if (!response.ok) throw new Error(`NYX API error: ${response.status}`);
-    const json = await response.json();
-    if (!json.ok || !json.results) throw new Error('Invalid NYX response');
+    const data: CFTCRawRow[] = await response.json();
 
-    const batchResults: Record<string, CFTCRawRow[]> = json.results;
-    const results: COTLatestRowLive[] = [];
-    let latestReportDate = '';
+    const results: COTLatestRowLive[] = data.map(asset => ({
+      asset: asset.symbol,
+      netChangePct: asset.score, // Folosim scorul ca indicator de trend
+      longContracts: Math.round(asset.breakdown.institutional.net_long * 1000),
+      shortContracts: Math.round((100 - asset.breakdown.institutional.net_long) * 1000),
+      deltaLong: 0,
+      deltaShort: 0,
+      longPct: asset.breakdown.institutional.net_long,
+      shortPct: 100 - asset.breakdown.institutional.net_long,
+      netPosition: asset.score,
+      starred: false,
+      openInterest: "LIVE",
+      deltaOI: 0,
+      reportDate: new Date().toLocaleDateString(),
+    }));
 
-    for (const symbol of COT_AVAILABLE_SYMBOLS) {
-      const rawRows = batchResults[symbol];
-      if (!rawRows || rawRows.length === 0) continue;
-
-      const currentRaw = rawRows[0];
-      const pos = extractTraderPositions(currentRaw, traderType);
-      const total = pos.longContracts + pos.shortContracts;
-      const netPosition = pos.longContracts - pos.shortContracts;
-      const oi = parseInt(currentRaw.open_interest_all || '0', 10);
-      const deltaOI = parseInt(currentRaw.change_in_open_interest_all || '0', 10);
-
-      let netChangePct = 0;
-      if (rawRows.length > 1) {
-        const prevPos = extractTraderPositions(rawRows[1], traderType);
-        const prevNet = prevPos.longContracts - prevPos.shortContracts;
-        if (prevNet !== 0) netChangePct = ((netPosition - prevNet) / Math.abs(prevNet)) * 100;
-      }
-
-      const reportDate = formatCFTCDate(currentRaw.report_date_as_yyyy_mm_dd);
-      if (!latestReportDate || new Date(currentRaw.report_date_as_yyyy_mm_dd) > new Date(latestReportDate)) {
-        latestReportDate = currentRaw.report_date_as_yyyy_mm_dd;
-      }
-
-      results.push({
-        asset: symbol,
-        netChangePct: Math.round(netChangePct * 100) / 100,
-        longContracts: pos.longContracts,
-        shortContracts: pos.shortContracts,
-        deltaLong: pos.deltaLong,
-        deltaShort: pos.deltaShort,
-        longPct: total > 0 ? Math.round((pos.longContracts / total) * 10000) / 100 : 50,
-        shortPct: total > 0 ? Math.round((pos.shortContracts / total) * 10000) / 100 : 50,
-        netPosition,
-        starred: false,
-        openInterest: formatOI(oi),
-        deltaOI,
-        reportDate,
-      });
-    }
-
-    const formattedReportDate = latestReportDate ? formatCFTCDate(latestReportDate) : '';
-    const cacheData = { data: results, reportDate: formattedReportDate };
-    dataCache.set(cacheKey, cacheData);
-
-    return { data: results, source: 'live', reportDate: formattedReportDate };
+    return { data: results, source: 'live', reportDate: new Date().toLocaleDateString() };
   } catch (err) {
     console.error(`[NYX Service] Batch failed:`, err);
     return { data: [], source: 'error', reportDate: '' };

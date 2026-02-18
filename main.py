@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
-from app.core.master_logic import MasterLogicEngine
+from core.master_logic import MasterLogicEngine
 import uvicorn
 import json
 import os

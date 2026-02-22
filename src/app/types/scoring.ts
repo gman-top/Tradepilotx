@@ -243,7 +243,7 @@ export interface AssetScorecard {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
- * The heatmap columns match 1:1 with the EdgeFinder-style grid.
+ * The heatmap columns match 1:1 with the TradePilot scoring grid.
  * Each cell is a score from -2 to +2.
  */
 export const TOP_SETUPS_COLUMNS = [
@@ -326,7 +326,7 @@ export const DEFAULT_CATEGORY_WEIGHTS: CategoryWeights = {
 /** Score → direction mapping */
 export function scoreToDirection(score: number): Direction {
   if (score > 0.3) return 'bullish';
-  if (score < -0.3) return 'neutral';   // conservative: only "bearish" at < -0.3
+  if (score < -0.3) return 'bearish';
   return 'neutral';
 }
 

@@ -446,7 +446,7 @@ export interface TechnicalHeatmapEntry {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ENDPOINT 14: GET /api/v1/scores/:symbol/history
-// Screen: Score History Chart (EdgeFinder score over time)
+// Screen: Score History Chart (TradePilot score over time)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export interface ScoreHistoryParams extends TimeRangeParams {

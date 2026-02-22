@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
-import { TrendingUp, Target, Calendar, Users, Zap, AlertTriangle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { TrendingUp, TrendingDown, Minus, Target, Calendar, Users, Zap, AlertTriangle, Loader2 } from 'lucide-react';
+import { useTradePilotData, biasDisplayName, BIAS_COLORS } from '../../engine/dataService';
+import type { AssetScorecard } from '../../types/scoring';
+import type { SignalCategory } from '../../types/database';
 
 const C = {
   l1: 'var(--tp-l1)', l2: 'var(--tp-l2)', l3: 'var(--tp-l3)',
@@ -8,142 +11,133 @@ const C = {
   accent: 'var(--tp-accent)', bullish: 'var(--tp-bullish)', bearish: 'var(--tp-bearish)', neutral: 'var(--tp-neutral)',
 };
 
-type Asset = 'Gold (XAU/USD)' | 'EUR/USD' | 'S&P 500' | 'Crude Oil';
-
-interface BiasData {
-  finalBias: string; biasType: string; totalScore: number; color: string;
-  scores: {
-    macro: { score: number; max: number; label: string; breakdown?: { growth: number; inflation: number; jobs: number; rates: number } };
-    cot: { score: number; max: number; label: string };
-    seasonality: { score: number; max: number; label: string };
-    sentiment: { score: number; max: number; label: string };
+function catLabel(cat: SignalCategory): string {
+  const map: Record<string, string> = {
+    technical: 'Technical', sentiment: 'Sentiment', cot: 'COT',
+    eco_growth: 'Growth', inflation: 'Inflation', jobs: 'Jobs',
+    rates: 'Rates', confidence: 'Confidence',
   };
-  whyExists: string[];
-  whatInvalidates: string[];
+  return map[cat] || cat;
 }
 
-const DATA: Record<Asset, BiasData> = {
-  'Gold (XAU/USD)': {
-    finalBias: 'Very Bullish', biasType: 'Macro-Led', totalScore: 85, color: C.bullish,
-    scores: {
-      macro: { score: 32, max: 40, label: 'Strong', breakdown: { growth: 0, inflation: 4, jobs: 6, rates: 22 } },
-      cot: { score: 28, max: 30, label: 'Extreme' },
-      seasonality: { score: 15, max: 20, label: 'Favorable' },
-      sentiment: { score: 10, max: 10, label: 'Bullish' },
-    },
-    whyExists: [
-      'Real rates compressing as nominal yields fall while inflation stays elevated',
-      'Commercials accumulating at 88th percentile — smart money positioning extreme',
-      'Jobs weakness increases Fed dovish tilt, lowering opportunity cost of gold',
-      'Seasonal tailwinds historically support Q1 strength',
-    ],
-    whatInvalidates: [
-      'Fed turns hawkish — unexpected rate hikes',
-      'Inflation collapses below 2% — removes hedge narrative',
-      'Jobs data strengthens significantly — delays rate cuts',
-      'Real yields spike above 2.5%',
-    ],
-  },
-  'EUR/USD': {
-    finalBias: 'Bearish', biasType: 'Rates-Driven', totalScore: 35, color: C.bearish,
-    scores: {
-      macro: { score: 12, max: 40, label: 'Weak' },
-      cot: { score: 8, max: 30, label: 'Weak' },
-      seasonality: { score: 8, max: 20, label: 'Neutral' },
-      sentiment: { score: 7, max: 10, label: 'Bearish' },
-    },
-    whyExists: [
-      'Rate divergence dominant — ECB expected to cut well before Fed',
-      'Eurozone growth significantly weaker than US',
-      'COT positioning shows net short building at 32nd percentile',
-      'Technical breakdown confirmed below key support at 1.09',
-    ],
-    whatInvalidates: [
-      'Fed cuts rates before ECB',
-      'Eurozone growth surprises positively — PMI back above 52',
-      'ECB turns unexpectedly hawkish',
-      'USD macro regime shifts to bearish',
-    ],
-  },
-  'S&P 500': {
-    finalBias: 'Bearish', biasType: 'COT + Macro Conflict', totalScore: 37, color: C.bearish,
-    scores: {
-      macro: { score: 14, max: 40, label: 'Mixed' },
-      cot: { score: 6, max: 30, label: 'Contrarian Short' },
-      seasonality: { score: 10, max: 20, label: 'Neutral' },
-      sentiment: { score: 7, max: 10, label: 'Cautious' },
-    },
-    whyExists: [
-      'COT shows extreme speculative long crowding — contrarian bearish',
-      'Jobs weakness threatens earnings while valuations remain extended',
-      'Market breadth deteriorating — fewer stocks participating',
-      'Credit spreads beginning to widen',
-    ],
-    whatInvalidates: [
-      'Jobs data stabilizes — NFP back above 200K',
-      'Fed pivots dovish and cuts rates 50bps',
-      'Earnings surprise massively to upside',
-      'Breadth improves with new highs expanding',
-    ],
-  },
-  'Crude Oil': {
-    finalBias: 'Bearish', biasType: 'Demand-Led', totalScore: 30, color: C.bearish,
-    scores: {
-      macro: { score: 8, max: 40, label: 'Weak' },
-      cot: { score: 8, max: 30, label: 'Weak' },
-      seasonality: { score: 6, max: 20, label: 'Unfavorable' },
-      sentiment: { score: 8, max: 10, label: 'Bearish' },
-    },
-    whyExists: [
-      'Demand slowdown from manufacturing PMI contraction',
-      'China growth concerns escalating',
-      'US production at record highs — supply abundant',
-      'OPEC+ struggling with quota compliance',
-    ],
-    whatInvalidates: [
-      'China announces major stimulus',
-      'OPEC+ implements deep production cuts',
-      'Geopolitical supply disruption',
-      'US production unexpectedly declines',
-    ],
-  },
-};
+function biasType(card: AssetScorecard): string {
+  // Find the dominant category
+  const cats = Object.entries(card.categories)
+    .filter(([_, v]) => v.signal_count > 0)
+    .sort((a, b) => Math.abs(b[1].score) - Math.abs(a[1].score));
 
-const ASSETS: Asset[] = ['Gold (XAU/USD)', 'EUR/USD', 'S&P 500', 'Crude Oil'];
-const SCORE_ICONS = [
-  { key: 'macro' as const, icon: Zap, label: 'Macro' },
-  { key: 'cot' as const, icon: Target, label: 'COT' },
-  { key: 'seasonality' as const, icon: Calendar, label: 'Seasonality' },
-  { key: 'sentiment' as const, icon: Users, label: 'Sentiment' },
-];
+  if (cats.length === 0) return 'Insufficient Data';
+  const top = cats[0][0] as SignalCategory;
+  const topLabel = catLabel(top);
+  if (Math.abs(cats[0][1].score) > 1.2) return `${topLabel}-Led`;
+  if (cats.length > 1 && Math.abs(cats[1][1].score) > 0.8) return `${topLabel} + ${catLabel(cats[1][0] as SignalCategory)}`;
+  return `${topLabel}-Driven`;
+}
+
+function generateReasons(card: AssetScorecard): string[] {
+  return card.readings
+    .filter(r => Math.abs(r.score) >= 1 && r.explanation)
+    .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
+    .slice(0, 4)
+    .map(r => r.explanation);
+}
+
+function generateInvalidates(card: AssetScorecard): string[] {
+  // Opposite of the strongest signals
+  return card.readings
+    .filter(r => Math.abs(r.score) >= 1 && r.explanation)
+    .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
+    .slice(0, 4)
+    .map(r => {
+      const opposite = r.score > 0 ? 'reverses bearish' : 'reverses bullish';
+      return `${catLabel(r.category)} ${opposite} — would negate current signal`;
+    });
+}
 
 export default function BiasEngine() {
-  const [selected, setSelected] = useState<Asset>('Gold (XAU/USD)');
-  const d = DATA[selected];
+  const { data, loading } = useTradePilotData();
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('');
+
+  const assetSymbols = useMemo(() => {
+    if (!data) return [];
+    return Object.keys(data.scorecards);
+  }, [data]);
+
+  // Set default selection
+  const activeSymbol = selectedSymbol || assetSymbols[0] || '';
+  const card = data?.scorecards[activeSymbol];
+
+  if (loading || !data) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 style={{ width: 24, height: 24, color: C.accent }} className="animate-spin" />
+      </div>
+    );
+  }
+
+  if (!card) return null;
+
+  const biasLabel = biasDisplayName(card.bias_label);
+  const biasColor = BIAS_COLORS[card.bias_label] || C.neutral;
+  const totalPct = Math.min(100, Math.max(0, ((card.total_score + 10) / 20) * 100));
+
+  const SCORE_SECTIONS: { key: string; cats: SignalCategory[]; icon: React.ElementType; label: string }[] = [
+    { key: 'macro', cats: ['eco_growth', 'inflation', 'jobs', 'rates', 'confidence'], icon: Zap, label: 'Macro' },
+    { key: 'cot', cats: ['cot'], icon: Target, label: 'COT' },
+    { key: 'technical', cats: ['technical'], icon: Calendar, label: 'Technical' },
+    { key: 'sentiment', cats: ['sentiment'], icon: Users, label: 'Sentiment' },
+  ];
+
+  function sectionScore(cats: SignalCategory[]): { score: number; maxScore: number; label: string; breakdown?: Record<string, number> } {
+    let total = 0;
+    let count = 0;
+    const breakdown: Record<string, number> = {};
+    for (const cat of cats) {
+      const c = card!.categories[cat];
+      if (c && c.signal_count > 0) {
+        total += c.score;
+        count++;
+        breakdown[catLabel(cat)] = Math.round(c.score * 100) / 100;
+      }
+    }
+    const avg = count > 0 ? total / count : 0;
+    const label = avg > 1 ? 'Strong' : avg > 0.3 ? 'Moderate' : avg < -1 ? 'Weak' : avg < -0.3 ? 'Negative' : 'Neutral';
+    const maxScore = 2; // Each category max is 2
+    return { score: Math.round(avg * 100) / 100, maxScore, label, breakdown: cats.length > 1 ? breakdown : undefined };
+  }
+
+  const reasons = generateReasons(card);
+  const invalidates = generateInvalidates(card);
+
+  const BiasIcon = card.total_score > 0
+    ? TrendingUp
+    : card.total_score < 0
+    ? TrendingDown
+    : Minus;
 
   return (
     <div className="p-5 md:p-8 lg:p-10">
       {/* Header */}
       <div className="mb-6">
         <h1 className="mb-1">Bias Engine</h1>
-        <p style={{ fontSize: 13, color: C.t2 }}>Macro-first directional framework &middot; Stacked decision, not single indicator</p>
+        <p style={{ fontSize: 13, color: C.t2 }}>Macro-first directional framework &middot; Stacked scoring across all categories</p>
       </div>
 
       {/* Asset tabs */}
       <div className="flex gap-2 flex-wrap mb-6">
-        {ASSETS.map(a => (
+        {assetSymbols.map(sym => (
           <button
-            key={a}
-            onClick={() => setSelected(a)}
+            key={sym}
+            onClick={() => setSelectedSymbol(sym)}
             className="px-3.5 py-1.5 rounded-md transition-all"
             style={{
               fontSize: 12, fontWeight: 500,
-              background: selected === a ? C.accent : C.l2,
-              color: selected === a ? '#fff' : C.t2,
-              border: `1px solid ${selected === a ? C.accent : C.borderSubtle}`,
+              background: activeSymbol === sym ? C.accent : C.l2,
+              color: activeSymbol === sym ? '#fff' : C.t2,
+              border: `1px solid ${activeSymbol === sym ? C.accent : C.borderSubtle}`,
             }}
           >
-            {a}
+            {sym}
           </button>
         ))}
       </div>
@@ -154,20 +148,20 @@ export default function BiasEngine() {
           <div>
             <span style={{ fontSize: 11, fontWeight: 500, color: C.t3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Final Bias</span>
             <div className="flex items-center gap-3 mt-2">
-              <TrendingUp style={{ width: 28, height: 28, color: d.color }} />
+              <BiasIcon style={{ width: 28, height: 28, color: biasColor }} />
               <div>
-                <div style={{ fontSize: 28, fontWeight: 700, color: d.color, letterSpacing: '-0.03em', lineHeight: 1.1 }}>
-                  {d.finalBias}
+                <div style={{ fontSize: 28, fontWeight: 700, color: biasColor, letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+                  {biasLabel}
                 </div>
-                <span style={{ fontSize: 12, color: C.t3 }}>{d.biasType}</span>
+                <span style={{ fontSize: 12, color: C.t3 }}>{biasType(card)}</span>
               </div>
             </div>
           </div>
           <div className="text-right">
-            <span style={{ fontSize: 11, fontWeight: 500, color: C.t3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Score</span>
+            <span style={{ fontSize: 11, fontWeight: 500, color: C.t3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>TP Score</span>
             <div className="mt-1">
-              <span className="tabular-nums" style={{ fontSize: 32, fontWeight: 700, color: C.t1, letterSpacing: '-0.03em' }}>{d.totalScore}</span>
-              <span style={{ fontSize: 16, fontWeight: 400, color: C.t3 }}>/100</span>
+              <span className="tabular-nums" style={{ fontSize: 32, fontWeight: 700, color: C.t1, letterSpacing: '-0.03em' }}>{card.total_score.toFixed(1)}</span>
+              <span style={{ fontSize: 16, fontWeight: 400, color: C.t3 }}>/10</span>
             </div>
           </div>
         </div>
@@ -175,9 +169,9 @@ export default function BiasEngine() {
 
       {/* Score cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        {SCORE_ICONS.map(({ key, icon: Icon, label }) => {
-          const s = d.scores[key];
-          const pct = (s.score / s.max) * 100;
+        {SCORE_SECTIONS.map(({ key, cats, icon: Icon, label }) => {
+          const s = sectionScore(cats);
+          const pct = Math.max(0, Math.min(100, ((s.score + 2) / 4) * 100));
           return (
             <div key={key} className="rounded-lg p-4" style={{ background: C.l2, border: `1px solid ${C.borderSubtle}` }}>
               <div className="flex items-center gap-1.5 mb-3">
@@ -185,20 +179,22 @@ export default function BiasEngine() {
                 <span style={{ fontSize: 11, fontWeight: 500, color: C.t3 }}>{label}</span>
               </div>
               <div className="mb-1">
-                <span className="tabular-nums" style={{ fontSize: 20, fontWeight: 700, color: C.t1 }}>{s.score}</span>
-                <span style={{ fontSize: 13, fontWeight: 400, color: C.t3 }}>/{s.max}</span>
+                <span className="tabular-nums" style={{ fontSize: 20, fontWeight: 700, color: C.t1 }}>
+                  {s.score > 0 ? '+' : ''}{s.score}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 400, color: C.t3 }}>/{s.maxScore}</span>
               </div>
               <span style={{ fontSize: 11, color: C.t3 }}>{s.label}</span>
               <div className="mt-3 rounded-full overflow-hidden" style={{ height: 3, background: C.l3 }}>
                 <div className="h-full rounded-full" style={{ width: `${pct}%`, background: C.accent, transition: 'width 0.3s ease' }} />
               </div>
-              {'breakdown' in s && s.breakdown && (
+              {s.breakdown && (
                 <div className="mt-3 pt-3 space-y-1" style={{ borderTop: `1px solid ${C.borderSubtle}` }}>
                   {Object.entries(s.breakdown).map(([k, v]) => (
                     <div key={k} className="flex justify-between">
-                      <span style={{ fontSize: 11, color: C.t3, textTransform: 'capitalize' }}>{k}</span>
-                      <span className="tabular-nums" style={{ fontSize: 11, fontWeight: 500, color: (v as number) >= 0 ? C.bullish : C.bearish }}>
-                        {(v as number) >= 0 ? '+' : ''}{v as number}
+                      <span style={{ fontSize: 11, color: C.t3 }}>{k}</span>
+                      <span className="tabular-nums" style={{ fontSize: 11, fontWeight: 500, color: v >= 0 ? C.bullish : C.bearish }}>
+                        {v >= 0 ? '+' : ''}{v.toFixed(1)}
                       </span>
                     </div>
                   ))}
@@ -214,10 +210,12 @@ export default function BiasEngine() {
         <div className="rounded-lg p-5" style={{ background: C.l2, border: `1px solid ${C.borderSubtle}` }}>
           <h3 className="mb-3">Why This Bias Exists</h3>
           <ul className="space-y-2.5">
-            {d.whyExists.map((r, i) => (
+            {reasons.length === 0 ? (
+              <li style={{ fontSize: 13, color: C.t3 }}>No strong signals detected for this asset.</li>
+            ) : reasons.map((r, i) => (
               <li key={i} className="flex items-start gap-2.5">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5" style={{ background: `color-mix(in srgb, ${d.color} 15%, transparent)` }}>
-                  <span className="tabular-nums" style={{ fontSize: 10, fontWeight: 600, color: d.color }}>{i + 1}</span>
+                <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5" style={{ background: `color-mix(in srgb, ${biasColor} 15%, transparent)` }}>
+                  <span className="tabular-nums" style={{ fontSize: 10, fontWeight: 600, color: biasColor }}>{i + 1}</span>
                 </span>
                 <span style={{ fontSize: 13, color: C.t1, lineHeight: 1.55 }}>{r}</span>
               </li>
@@ -231,7 +229,9 @@ export default function BiasEngine() {
             <h3>What Invalidates</h3>
           </div>
           <ul className="space-y-2.5">
-            {d.whatInvalidates.map((r, i) => (
+            {invalidates.length === 0 ? (
+              <li style={{ fontSize: 13, color: C.t3 }}>Bias is neutral — no strong conviction to invalidate.</li>
+            ) : invalidates.map((r, i) => (
               <li key={i} className="flex items-start gap-2.5">
                 <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center mt-0.5" style={{ background: 'rgba(248,113,113,0.1)' }}>
                   <span className="tabular-nums" style={{ fontSize: 10, fontWeight: 600, color: C.bearish }}>{i + 1}</span>
@@ -243,12 +243,30 @@ export default function BiasEngine() {
         </div>
       </div>
 
-      {/* Methodology */}
-      <div className="rounded-lg p-4" style={{ background: C.l2, border: `1px solid ${C.borderSubtle}` }}>
-        <p style={{ fontSize: 12, color: C.t3, lineHeight: 1.6 }}>
-          <span style={{ color: C.t2, fontWeight: 500 }}>About the Bias Engine:</span> Macro-first framework. Regime determines direction, categories (Growth/Inflation/Jobs/Rates)
-          produce bias, asset-level impact mapped from dominant categories. COT confirms or contradicts. Scores are weighted but subordinate to interpretation.
-        </p>
+      {/* All readings */}
+      <div className="rounded-lg p-5" style={{ background: C.l2, border: `1px solid ${C.borderSubtle}` }}>
+        <h3 className="mb-3">Signal Readings ({card.readings.length})</h3>
+        <div className="space-y-1">
+          {card.readings
+            .sort((a, b) => Math.abs(b.score) - Math.abs(a.score))
+            .map((r, i) => (
+            <div key={i} className="flex items-center justify-between py-1.5 px-2 rounded" style={{ background: i % 2 === 0 ? C.l1 : 'transparent' }}>
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="rounded px-1.5 py-0.5 flex-shrink-0" style={{ fontSize: 9, fontWeight: 600, color: C.t3, background: C.l3, textTransform: 'uppercase' }}>
+                  {catLabel(r.category)}
+                </span>
+                <span className="truncate" style={{ fontSize: 12, color: C.t2 }}>{r.explanation}</span>
+              </div>
+              <span className="tabular-nums flex-shrink-0 ml-2 w-7 text-center rounded py-0.5" style={{
+                fontSize: 11, fontWeight: 600,
+                color: r.score > 0 ? C.bullish : r.score < 0 ? C.bearish : C.neutral,
+                background: C.l3,
+              }}>
+                {r.score > 0 ? '+' : ''}{r.score}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

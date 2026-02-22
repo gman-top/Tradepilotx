@@ -90,7 +90,7 @@ export default function AuthPage() {
             Macro-first trading intelligence.
           </h1>
           <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--tp-text-2)' }}>
-            Institutional COT data, macro regime analysis, bias engine, and EdgeFinder scores — all in one premium dashboard.
+            Institutional COT data, macro regime analysis, bias engine, and scored setups — all in one premium dashboard.
           </p>
         </div>
 
@@ -98,7 +98,7 @@ export default function AuthPage() {
           {[
             { label: 'COT Positioning', desc: 'Live CFTC data with percentile rankings' },
             { label: 'Bias Engine', desc: 'Macro-first directional framework' },
-            { label: 'EdgeFinder', desc: '19 instruments scored weekly' },
+            { label: 'Top Setups', desc: '20 instruments scored in real-time' },
           ].map((f, i) => (
             <div key={i} className="flex items-start gap-3">
               <div

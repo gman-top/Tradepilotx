@@ -1,5 +1,6 @@
 import React from 'react';
-import { TrendingUp, TrendingDown, Minus, ShieldAlert, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
+import { useTradePilotData } from '../../engine/dataService';
 
 const C = {
   l1: 'var(--tp-l1)', l2: 'var(--tp-l2)', l3: 'var(--tp-l3)',
@@ -9,39 +10,30 @@ const C = {
 };
 
 export default function Overview() {
-  const categoryBiases = [
-    { category: 'Growth', bias: 'Bullish', strength: 'Moderate', score: 1, color: C.bullish },
-    { category: 'Inflation', bias: 'Neutral', strength: 'Weak', score: 0, color: C.neutral },
-    { category: 'Jobs', bias: 'Bearish', strength: 'Strong', score: -2, color: C.bearish },
-    { category: 'Rates', bias: 'Bullish', strength: 'Strong', score: 2, color: C.bullish },
-  ];
+  const { data, loading } = useTradePilotData();
 
-  const regime = { label: 'Risk-Off / Defensive', description: 'Jobs weakening while rates stay elevated. Growth holding but vulnerable.' };
+  if (loading || !data) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 style={{ width: 24, height: 24, color: C.accent }} className="animate-spin" />
+      </div>
+    );
+  }
 
-  const favored = [
-    { asset: 'Gold (XAU/USD)', reason: 'Safe-haven demand + inflation hedge', strength: 'Very Strong' },
-    { asset: 'Japanese Yen (JPY)', reason: 'Flight to quality + BOJ policy', strength: 'Strong' },
-    { asset: 'US Treasuries', reason: 'Defensive positioning', strength: 'Strong' },
-  ];
-
-  const hurt = [
-    { asset: 'S&P 500 (SPX)', reason: 'Growth concerns + high valuations', strength: 'Strong' },
-    { asset: 'Crude Oil (WTI)', reason: 'Demand slowdown evident', strength: 'Moderate' },
-    { asset: 'EUR/USD', reason: 'Rate divergence favors USD', strength: 'Moderate' },
-  ];
-
-  const drivers = [
-    { label: 'Growth: Bullish (Moderate)', color: C.bullish, text: 'Retail sales beat. Services PMI above 50. GDP steady at 2.8%.' },
-    { label: 'Inflation: Neutral (Weak)', color: C.neutral, text: 'CPI elevated but not accelerating. PCE at 2.8%. No clear direction.' },
-    { label: 'Jobs: Bearish (Strong)', color: C.bearish, text: 'NFP miss at 185K. Unemployment rose to 4.1%. Jobless claims trending up.' },
-    { label: 'Rates: Bullish (Strong)', color: C.bullish, text: 'Fed on hold at 4.5%. Real rates compressing. Market pricing cuts.' },
-  ];
+  const { regime } = data;
 
   const BiasIcon = ({ score }: { score: number }) => {
     if (score > 0) return <TrendingUp style={{ width: 18, height: 18 }} />;
     if (score < 0) return <TrendingDown style={{ width: 18, height: 18 }} />;
     return <Minus style={{ width: 18, height: 18 }} />;
   };
+
+  // Build drivers from regime category biases
+  const drivers = regime.categoryBiases.map(cat => ({
+    label: `${cat.category}: ${cat.bias} (${cat.strength})`,
+    color: cat.color,
+    text: cat.summary,
+  }));
 
   return (
     <div className="p-5 md:p-8 lg:p-10">
@@ -62,7 +54,7 @@ export default function Overview() {
 
       {/* Category Biases */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {categoryBiases.map((cat) => (
+        {regime.categoryBiases.map((cat) => (
           <div key={cat.category} className="rounded-lg p-4" style={{ background: C.l2, border: `1px solid ${C.borderSubtle}` }}>
             <div className="flex items-center justify-between mb-3">
               <span style={{ fontSize: 13, fontWeight: 500, color: C.t1 }}>{cat.category}</span>
@@ -74,11 +66,11 @@ export default function Overview() {
               <div className="flex-1 rounded-full overflow-hidden" style={{ height: 3, background: C.l3 }}>
                 <div
                   className="h-full rounded-full transition-all"
-                  style={{ width: `${Math.abs(cat.score) * 50}%`, marginLeft: cat.score < 0 ? 'auto' : 0, background: cat.color }}
+                  style={{ width: `${Math.min(100, Math.abs(cat.score) * 50)}%`, marginLeft: cat.score < 0 ? 'auto' : 0, background: cat.color }}
                 />
               </div>
-              <span className="tabular-nums" style={{ fontSize: 11, color: C.t3, width: 24, textAlign: 'right' }}>
-                {cat.score > 0 ? '+' : ''}{cat.score}
+              <span className="tabular-nums" style={{ fontSize: 11, color: C.t3, width: 30, textAlign: 'right' }}>
+                {cat.score > 0 ? '+' : ''}{cat.score.toFixed(1)}
               </span>
             </div>
           </div>
@@ -94,10 +86,10 @@ export default function Overview() {
             <h3>Regime Favors</h3>
           </div>
           <div className="space-y-3">
-            {favored.map((item, i) => (
-              <div key={i} className="flex items-start justify-between pb-3" style={{ borderBottom: i < favored.length - 1 ? `1px solid ${C.borderSubtle}` : 'none' }}>
+            {regime.favoredAssets.map((item, i) => (
+              <div key={i} className="flex items-start justify-between pb-3" style={{ borderBottom: i < regime.favoredAssets.length - 1 ? `1px solid ${C.borderSubtle}` : 'none' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.t1, marginBottom: 2 }}>{item.asset}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.t1, marginBottom: 2 }}>{item.asset} ({item.symbol})</div>
                   <div style={{ fontSize: 12, color: C.t2 }}>{item.reason}</div>
                 </div>
                 <span className="ml-3 flex-shrink-0 rounded px-2 py-0.5" style={{ fontSize: 11, fontWeight: 500, color: C.bullish, background: 'rgba(52,211,153,0.1)' }}>
@@ -115,10 +107,10 @@ export default function Overview() {
             <h3>Regime Hurts</h3>
           </div>
           <div className="space-y-3">
-            {hurt.map((item, i) => (
-              <div key={i} className="flex items-start justify-between pb-3" style={{ borderBottom: i < hurt.length - 1 ? `1px solid ${C.borderSubtle}` : 'none' }}>
+            {regime.hurtAssets.map((item, i) => (
+              <div key={i} className="flex items-start justify-between pb-3" style={{ borderBottom: i < regime.hurtAssets.length - 1 ? `1px solid ${C.borderSubtle}` : 'none' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.t1, marginBottom: 2 }}>{item.asset}</div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: C.t1, marginBottom: 2 }}>{item.asset} ({item.symbol})</div>
                   <div style={{ fontSize: 12, color: C.t2 }}>{item.reason}</div>
                 </div>
                 <span className="ml-3 flex-shrink-0 rounded px-2 py-0.5" style={{ fontSize: 11, fontWeight: 500, color: C.bearish, background: 'rgba(248,113,113,0.1)' }}>

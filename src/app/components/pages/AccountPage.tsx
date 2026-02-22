@@ -209,7 +209,7 @@ export default function AccountPage() {
               />
               <ToggleRow
                 label="Bias changes"
-                description="Alert when EdgeFinder bias changes for favorites"
+                description="Alert when TradePilot bias changes for favorites"
                 checked={true}
                 onChange={() => showSaved()}
               />

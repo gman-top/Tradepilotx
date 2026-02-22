@@ -443,179 +443,145 @@ export default function Fundamentals() {
   };
 
   const getContributionColor = (contribution: number) => {
-    if (contribution >= 2) return '#3FAE7A';
-    if (contribution === 1) return '#3FAE7A';
-    if (contribution === -1) return '#D66565';
-    if (contribution <= -2) return '#D66565';
-    return '#6F7A90';
+    if (contribution >= 1) return 'var(--tp-bullish)';
+    if (contribution <= -1) return 'var(--tp-bearish)';
+    return 'var(--tp-neutral)';
   };
 
   const getContributionLabel = (contribution: number) => {
-    if (contribution === 2) return '+2';
-    if (contribution === 1) return '+1';
-    if (contribution === 0) return '0';
-    if (contribution === -1) return '-1';
-    if (contribution === -2) return '-2';
-    return '0';
+    if (contribution > 0) return `+${contribution}`;
+    return `${contribution}`;
   };
 
   const getDirectionColor = (direction: string) => {
-    if (direction === 'Bullish') return '#3FAE7A';
-    if (direction === 'Bearish') return '#D66565';
-    return '#6F7A90';
+    if (direction === 'Bullish') return 'var(--tp-bullish)';
+    if (direction === 'Bearish') return 'var(--tp-bearish)';
+    return 'var(--tp-neutral)';
   };
 
   const getBiasIcon = (score: number) => {
-    if (score > 0) return <TrendingUp className="w-5 h-5" />;
-    if (score < 0) return <TrendingDown className="w-5 h-5" />;
-    return <Minus className="w-5 h-5" />;
+    if (score > 0) return <TrendingUp className="w-4 h-4" />;
+    if (score < 0) return <TrendingDown className="w-4 h-4" />;
+    return <Minus className="w-4 h-4" />;
   };
 
   return (
-    <div className="p-8 max-w-[1800px] mx-auto">
+    <div className="p-5 md:p-8 lg:p-10">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl mb-2">Fundamentals</h1>
-        <p className="text-[#9AA1B2]">Category-level bias aggregation • Interpret first, data second</p>
+      <div className="mb-6">
+        <h1 className="mb-1">Fundamentals</h1>
+        <p style={{ fontSize: 13, color: 'var(--tp-text-2)' }}>Category-level bias aggregation &middot; Interpret first, data second</p>
       </div>
 
       {/* Category Bias Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
         {(Object.keys(categories) as Category[]).map((category) => {
           const data = categories[category];
           return (
-            <div key={category} className="bg-[#141823] rounded-lg p-4 border border-[#1E2433]">
+            <div key={category} className="rounded-lg p-4" style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border-subtle)' }}>
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm">{category}</h3>
-                <div style={{ color: data.color }}>{getBiasIcon(data.score)}</div>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--tp-text-1)' }}>{category}</span>
+                <span style={{ color: data.color }}>{getBiasIcon(data.score)}</span>
               </div>
-              <div className="text-lg mb-1" style={{ color: data.color }}>
-                {data.bias}
-              </div>
-              <div className="text-xs text-[#9AA1B2] mb-2">{data.strength}</div>
-              <div className="text-sm font-medium">Score: {data.score}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: data.color, marginBottom: 2 }}>{data.bias}</div>
+              <span style={{ fontSize: 11, color: 'var(--tp-text-3)' }}>{data.strength} &middot; Score: {data.score}</span>
             </div>
           );
         })}
       </div>
 
-      {/* Expandable Categories with NYX-Style Tables */}
-      <div className="space-y-4">
+      {/* Expandable Categories */}
+      <div className="space-y-3">
         {(Object.keys(categories) as Category[]).map((category) => {
           const isExpanded = expandedCategory === category;
           const data = categories[category];
 
           return (
-            <div key={category} className="bg-[#141823] rounded-lg border border-[#1E2433] overflow-hidden">
-              {/* Category Header */}
+            <div key={category} className="rounded-lg overflow-hidden" style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border-subtle)' }}>
               <button
                 onClick={() => toggleCategory(category)}
-                className="w-full flex items-center justify-between p-5 hover:bg-[#1E2433] transition-colors"
+                className="w-full flex items-center justify-between p-4 transition-colors"
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tp-l3)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
               >
-                <div className="flex items-center gap-4">
-                  <div style={{ color: data.color }}>{getBiasIcon(data.score)}</div>
+                <div className="flex items-center gap-3">
+                  <span style={{ color: data.color }}>{getBiasIcon(data.score)}</span>
                   <div className="text-left">
-                    <h2 className="text-xl mb-1">{category}</h2>
-                    <p className="text-sm" style={{ color: data.color }}>
-                      {data.bias} ({data.strength}) • Score: {data.score} • {data.summary}
+                    <h3>{category}</h3>
+                    <p style={{ fontSize: 12, color: data.color, marginTop: 2 }}>
+                      {data.bias} ({data.strength}) &middot; Score: {data.score}
                     </p>
                   </div>
                 </div>
                 {isExpanded ? (
-                  <ChevronUp className="w-5 h-5 text-[#9AA1B2]" />
+                  <ChevronUp style={{ width: 16, height: 16, color: 'var(--tp-text-3)' }} />
                 ) : (
-                  <ChevronDown className="w-5 h-5 text-[#9AA1B2]" />
+                  <ChevronDown style={{ width: 16, height: 16, color: 'var(--tp-text-3)' }} />
                 )}
               </button>
 
-              {/* Category Content - NYX-Style Table */}
               {isExpanded && (
-                <div className="border-t border-[#1E2433]">
+                <div style={{ borderTop: '1px solid var(--tp-border-subtle)' }}>
                   <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full" style={{ minWidth: 780 }}>
                       <thead>
-                        <tr className="bg-[#0E1116] border-b border-[#1E2433]">
-                          <th className="text-left py-3 px-4 text-sm text-[#9AA1B2]">Indicator</th>
-                          <th className="text-center py-3 px-4 text-sm text-[#9AA1B2]">Direction</th>
-                          <th className="text-center py-3 px-4 text-sm text-[#9AA1B2]">Strength</th>
-                          <th className="text-right py-3 px-4 text-sm text-[#9AA1B2]">Actual</th>
-                          <th className="text-right py-3 px-4 text-sm text-[#9AA1B2]">Forecast</th>
-                          <th className="text-right py-3 px-4 text-sm text-[#9AA1B2]">Previous</th>
-                          <th className="text-center py-3 px-4 text-sm text-[#9AA1B2]">Surprise</th>
-                          <th className="text-center py-3 px-4 text-sm text-[#9AA1B2]">Category Score</th>
-                          <th className="text-right py-3 px-4 text-sm text-[#9AA1B2]">Date</th>
+                        <tr style={{ background: 'var(--tp-l1)', borderBottom: '1px solid var(--tp-border)' }}>
+                          <th className="text-left py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Indicator</th>
+                          <th className="text-center py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Direction</th>
+                          <th className="text-center py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Strength</th>
+                          <th className="text-right py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Actual</th>
+                          <th className="text-right py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Forecast</th>
+                          <th className="text-right py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Previous</th>
+                          <th className="text-center py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Surprise</th>
+                          <th className="text-center py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Score</th>
+                          <th className="text-right py-2.5 px-3" style={{ fontSize: 10, fontWeight: 600, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Date</th>
                         </tr>
                       </thead>
                       <tbody>
                         {data.indicators.map((indicator, index) => (
-                          <tr key={index} className="border-b border-[#1E2433] last:border-b-0 hover:bg-[#0E1116] transition-colors">
-                            <td className="py-3 px-4">
-                              <div className="font-medium">{indicator.name}</div>
-                            </td>
-                            <td className="py-3 px-4 text-center">
-                              <span
-                                className="inline-block px-3 py-1 rounded text-xs font-medium"
-                                style={{
-                                  color: getDirectionColor(indicator.direction),
-                                  backgroundColor: `${getDirectionColor(indicator.direction)}20`,
-                                }}
-                              >
+                          <tr
+                            key={index}
+                            className="transition-colors"
+                            style={{ borderBottom: `1px solid var(--tp-border-subtle)` }}
+                            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tp-l3)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+                          >
+                            <td className="py-2.5 px-3" style={{ fontSize: 13, fontWeight: 500, color: 'var(--tp-text-1)' }}>{indicator.name}</td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span className="rounded px-2 py-0.5" style={{ fontSize: 11, fontWeight: 500, color: getDirectionColor(indicator.direction), background: `color-mix(in srgb, ${getDirectionColor(indicator.direction)} 12%, transparent)` }}>
                                 {indicator.direction}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-center text-sm">{indicator.strength}</td>
-                            <td className="py-3 px-4 text-right font-medium">{indicator.actual}</td>
-                            <td className="py-3 px-4 text-right text-[#9AA1B2]">{indicator.forecast}</td>
-                            <td className="py-3 px-4 text-right text-[#9AA1B2]">{indicator.previous}</td>
-                            <td className="py-3 px-4 text-center">
-                              <span
-                                className={`text-xs ${
-                                  indicator.surprise === 'positive'
-                                    ? 'text-[#3FAE7A]'
-                                    : indicator.surprise === 'negative'
-                                    ? 'text-[#D66565]'
-                                    : 'text-[#6F7A90]'
-                                }`}
-                              >
-                                {indicator.surprise === 'positive' ? '▲' : indicator.surprise === 'negative' ? '▼' : '—'}
+                            <td className="py-2.5 px-3 text-center" style={{ fontSize: 12, color: 'var(--tp-text-2)' }}>{indicator.strength}</td>
+                            <td className="py-2.5 px-3 text-right tabular-nums" style={{ fontSize: 13, fontWeight: 500, color: 'var(--tp-text-1)' }}>{indicator.actual}</td>
+                            <td className="py-2.5 px-3 text-right tabular-nums" style={{ fontSize: 12, color: 'var(--tp-text-3)' }}>{indicator.forecast}</td>
+                            <td className="py-2.5 px-3 text-right tabular-nums" style={{ fontSize: 12, color: 'var(--tp-text-3)' }}>{indicator.previous}</td>
+                            <td className="py-2.5 px-3 text-center">
+                              <span style={{ fontSize: 12, color: indicator.surprise === 'positive' ? 'var(--tp-bullish)' : indicator.surprise === 'negative' ? 'var(--tp-bearish)' : 'var(--tp-neutral)' }}>
+                                {indicator.surprise === 'positive' ? '\u25B2' : indicator.surprise === 'negative' ? '\u25BC' : '\u2014'}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-center">
-                              <span
-                                className="inline-block w-12 py-1 rounded text-sm font-medium"
-                                style={{
-                                  color: getContributionColor(indicator.categoryContribution),
-                                  backgroundColor: `${getContributionColor(indicator.categoryContribution)}30`,
-                                }}
-                              >
+                            <td className="py-2.5 px-3 text-center">
+                              <span className="inline-block w-8 py-0.5 rounded tabular-nums" style={{ fontSize: 11, fontWeight: 500, color: getContributionColor(indicator.categoryContribution), background: 'var(--tp-l3)' }}>
                                 {getContributionLabel(indicator.categoryContribution)}
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-right text-sm text-[#9AA1B2]">{indicator.date}</td>
+                            <td className="py-2.5 px-3 text-right" style={{ fontSize: 11, color: 'var(--tp-text-3)' }}>{indicator.date}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
 
-                  {/* Category Net Score Summary */}
-                  <div className="p-4 bg-[#0E1116] border-t border-[#1E2433]">
+                  {/* Category Net Score */}
+                  <div className="p-4" style={{ background: 'var(--tp-l1)', borderTop: '1px solid var(--tp-border-subtle)' }}>
                     <div className="flex items-center justify-between">
-                      <div className="text-sm text-[#9AA1B2]">Net Category Score:</div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-lg font-medium" style={{ color: data.color }}>
-                          {data.bias}
-                        </div>
-                        <div
-                          className="px-4 py-2 rounded font-medium text-lg"
-                          style={{
-                            color: data.color,
-                            backgroundColor: `${data.color}20`,
-                          }}
-                        >
-                          {data.score > 0 ? '+' : ''}
-                          {data.score}
-                        </div>
+                      <span style={{ fontSize: 12, color: 'var(--tp-text-2)' }}>Net Category Score</span>
+                      <div className="flex items-center gap-2">
+                        <span style={{ fontSize: 14, fontWeight: 600, color: data.color }}>{data.bias}</span>
+                        <span className="rounded px-2.5 py-1 tabular-nums" style={{ fontSize: 13, fontWeight: 600, color: data.color, background: `color-mix(in srgb, ${data.color} 12%, transparent)` }}>
+                          {data.score > 0 ? '+' : ''}{data.score}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -627,39 +593,39 @@ export default function Fundamentals() {
       </div>
 
       {/* Net Macro Interpretation */}
-      <div className="mt-8 bg-[#141823] rounded-lg p-6 border border-[#1E2433]">
-        <h2 className="text-xl mb-4">Net Macro Interpretation</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="mt-6 rounded-lg p-5" style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border-subtle)' }}>
+        <h3 className="mb-4">Net Macro Interpretation</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <h3 className="text-sm text-[#9AA1B2] mb-3">Bullish Drivers</h3>
-            <ul className="space-y-2">
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Bullish Drivers</span>
+            <ul className="mt-2 space-y-2">
               <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#3FAE7A] mt-2 flex-shrink-0" />
-                <span className="text-sm text-[#E6E9F0]">
-                  <span className="text-[#3FAE7A]">Rates (+2):</span> Real yields compressing = bullish gold, bonds
+                <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: 'var(--tp-bullish)' }} />
+                <span style={{ fontSize: 13, color: 'var(--tp-text-1)', lineHeight: 1.5 }}>
+                  <span style={{ color: 'var(--tp-bullish)' }}>Rates (+2):</span> Real yields compressing = bullish gold, bonds
                 </span>
               </li>
               <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#3FAE7A] mt-2 flex-shrink-0" />
-                <span className="text-sm text-[#E6E9F0]">
-                  <span className="text-[#3FAE7A]">Growth (+1):</span> GDP and retail sales holding = not recession yet
+                <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: 'var(--tp-bullish)' }} />
+                <span style={{ fontSize: 13, color: 'var(--tp-text-1)', lineHeight: 1.5 }}>
+                  <span style={{ color: 'var(--tp-bullish)' }}>Growth (+1):</span> GDP and retail sales holding = not recession yet
                 </span>
               </li>
             </ul>
           </div>
           <div>
-            <h3 className="text-sm text-[#9AA1B2] mb-3">Bearish Drivers</h3>
-            <ul className="space-y-2">
+            <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--tp-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Bearish Drivers</span>
+            <ul className="mt-2 space-y-2">
               <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#D66565] mt-2 flex-shrink-0" />
-                <span className="text-sm text-[#E6E9F0]">
-                  <span className="text-[#D66565]">Jobs (-2):</span> Labor weakening = earnings risk for equities
+                <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: 'var(--tp-bearish)' }} />
+                <span style={{ fontSize: 13, color: 'var(--tp-text-1)', lineHeight: 1.5 }}>
+                  <span style={{ color: 'var(--tp-bearish)' }}>Jobs (-2):</span> Labor weakening = earnings risk for equities
                 </span>
               </li>
               <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#D66565] mt-2 flex-shrink-0" />
-                <span className="text-sm text-[#E6E9F0]">
-                  <span className="text-[#D66565]">Housing (-1):</span> High rates biting = consumer stress building
+                <div className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0" style={{ background: 'var(--tp-bearish)' }} />
+                <span style={{ fontSize: 13, color: 'var(--tp-text-1)', lineHeight: 1.5 }}>
+                  <span style={{ color: 'var(--tp-bearish)' }}>Housing (-1):</span> High rates biting = consumer stress building
                 </span>
               </li>
             </ul>

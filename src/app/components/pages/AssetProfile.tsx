@@ -17,7 +17,7 @@ interface MetricRow {
 }
 
 interface SymbolData {
-  nyxScore: number;
+  edgeFinderScore: number;
   technicalScore: number;
   sentimentCotScore: number;
   fundamentalsScore: number;
@@ -104,7 +104,7 @@ const SCORES: Record<string, number> = {
 // DETAILED MOCK DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 const SPX_DATA: SymbolData = {
-  nyxScore: -5, technicalScore: -3, sentimentCotScore: -2, fundamentalsScore: 0,
+  edgeFinderScore: -5, technicalScore: -3, sentimentCotScore: -2, fundamentalsScore: 0,
   chartTrend: 'Bearish', seasonality: 'Bearish', technicalOverall: 'Very Bearish',
   crowdSentiment: 'Crowd sentiment is mixed', crowdSentimentBias: 'Neutral',
   cotOverall: 'Bearish', cotNetBias: 'Bearish', cotLatestBias: 'Bearish',
@@ -148,7 +148,7 @@ const SPX_DATA: SymbolData = {
 };
 
 const GOLD_DATA: SymbolData = {
-  nyxScore: 1, technicalScore: 2, sentimentCotScore: 1, fundamentalsScore: -1,
+  edgeFinderScore: 1, technicalScore: 2, sentimentCotScore: 1, fundamentalsScore: -1,
   chartTrend: 'Bullish', seasonality: 'Bullish', technicalOverall: 'Bullish',
   crowdSentiment: 'Crowd sentiment is bullish', crowdSentimentBias: 'Bullish',
   cotOverall: 'Bullish', cotNetBias: 'Bullish', cotLatestBias: 'Bullish',
@@ -180,7 +180,7 @@ const GOLD_DATA: SymbolData = {
 };
 
 const EUR_DATA: SymbolData = {
-  nyxScore: -2, technicalScore: -3, sentimentCotScore: -1, fundamentalsScore: -1,
+  edgeFinderScore: -2, technicalScore: -3, sentimentCotScore: -1, fundamentalsScore: -1,
   chartTrend: 'Bearish', seasonality: 'Neutral', technicalOverall: 'Bearish',
   crowdSentiment: 'Crowd sentiment is bearish', crowdSentimentBias: 'Bearish',
   cotOverall: 'Bearish', cotNetBias: 'Bearish', cotLatestBias: 'Bearish',
@@ -252,7 +252,7 @@ function generateData(symbol: string, score: number): SymbolData {
   const lp = isBear ? 38 + seed(0) * 10 : 55 + seed(0) * 10;
 
   return {
-    nyxScore: score, technicalScore: tScore, sentimentCotScore: sScore, fundamentalsScore: fScore,
+    edgeFinderScore: score, technicalScore: tScore, sentimentCotScore: sScore, fundamentalsScore: fScore,
     chartTrend: pickBias(0), seasonality: pickBias(1), technicalOverall: pickBias(0),
     crowdSentiment: isBear ? 'Crowd sentiment is bearish' : score === 0 ? 'Crowd sentiment is mixed' : 'Crowd sentiment is bullish',
     crowdSentimentBias: b,
@@ -358,7 +358,7 @@ function Gauge({ score }: { score: number }) {
         stroke={color} strokeWidth="2.5" strokeLinecap="round"
       />
       <circle cx={CX} cy={CY} r="5" fill={color} />
-      <circle cx={CX} cy={CY} r="2.5" fill="#0E1116" />
+      <circle cx={CX} cy={CY} r="2.5" fill="#14161C" />
       {/* Score display */}
       <text
         x={CX} y={CY + 22}
@@ -409,11 +409,11 @@ function SectionHeader({
 }) {
   return (
     <div
-      className="flex items-center gap-0 border-b border-[#2A3040]"
-      style={{ backgroundColor: '#181D28' }}
+      className="flex items-center gap-0"
+      style={{ backgroundColor: 'var(--tp-l0)', borderBottom: '1px solid var(--tp-border)' }}
     >
       <div className="flex items-center gap-3 flex-1 px-3 py-[6px]">
-        <span className="text-[12px] text-[#C8CDD8]" style={{ fontWeight: 500 }}>{title}</span>
+        <span className="text-[12px]" style={{ color: 'var(--tp-text-1)', fontWeight: 500 }}>{title}</span>
         <span className="text-[12px]" style={{ color: BIAS_TEXT[bias], fontWeight: 600 }}>{bias}</span>
       </div>
       {columns && columns.length > 0 && (
@@ -421,8 +421,8 @@ function SectionHeader({
           {columns.map((col) => (
             <span
               key={col}
-              className="text-[11px] text-[#6F7A90] text-right px-2 py-[6px]"
-              style={{ width: '76px', fontWeight: 500, fontStyle: 'italic' }}
+              className="text-[11px] text-right px-2 py-[6px]"
+              style={{ width: '76px', fontWeight: 500, fontStyle: 'italic', color: 'var(--tp-text-3)' }}
             >
               {col}
             </span>
@@ -436,18 +436,21 @@ function SectionHeader({
 // Data row for metric tables (Economic, Inflation, Jobs)
 function DataRow({ row }: { row: MetricRow }) {
   return (
-    <div className="flex items-center border-b border-[#1A2030] hover:bg-[#141A24] transition-colors">
+    <div className="flex items-center transition-colors" style={{ borderBottom: '1px solid var(--tp-border-subtle)' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--tp-l3)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
       <div className="flex-1 flex items-center gap-2 px-3 py-[4px]">
-        <span className="text-[12px] text-[#9AA1B2]" style={{ width: '170px', flexShrink: 0 }}>
+        <span className="text-[12px]" style={{ width: '170px', flexShrink: 0, color: 'var(--tp-text-2)' }}>
           {row.metric}
         </span>
         <BiasPill bias={row.bias} compact />
       </div>
       <div className="flex">
-        <span className="text-[12px] text-[#C8CDD8] text-right px-2 py-[4px]" style={{ width: '76px' }}>
+        <span className="text-[12px] text-right px-2 py-[4px]" style={{ width: '76px', color: 'var(--tp-text-1)' }}>
           {row.actual}
         </span>
-        <span className="text-[12px] text-[#7A8295] text-right px-2 py-[4px]" style={{ width: '76px' }}>
+        <span className="text-[12px] text-right px-2 py-[4px]" style={{ width: '76px', color: 'var(--tp-text-3)' }}>
           {row.forecast}
         </span>
         <span
@@ -579,30 +582,30 @@ export default function AssetProfile() {
   }, [selectedSymbol]);
 
   const displayName = COT_SYMBOL_MAPPINGS[selectedSymbol]?.displayName || selectedSymbol;
-  const bias = overallBias(data.nyxScore);
+  const bias = overallBias(data.edgeFinderScore);
   const currentScore = SCORES[selectedSymbol] ?? 0;
 
   return (
-    <div className="h-full overflow-auto bg-[#0E1116]">
+    <div className="h-full overflow-auto" style={{ background: 'var(--tp-l1)' }}>
       {/* ─── Header ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1E2433]">
+      <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--tp-border-subtle)' }}>
         <div className="flex items-center gap-3">
           <div>
-            <span className="text-[15px] text-[#E6E9F0]" style={{ fontWeight: 600 }}>Asset Profile</span>
-            <span className="text-[11px] text-[#6F7A90] ml-3">tradepilot.app/edgefinder</span>
+            <span className="text-[15px]" style={{ fontWeight: 600, color: 'var(--tp-text-1)' }}>Asset Profile</span>
+            <span className="text-[11px] ml-3" style={{ color: 'var(--tp-text-3)' }}>tradepilot.app/edgefinder</span>
           </div>
         </div>
-        <span className="text-[10px] text-[#5A6375] max-w-[480px] text-right leading-tight">
-          The readings generated by NYX are for informational purposes only, do not constitute financial advice.
+        <span className="text-[10px] max-w-[480px] text-right leading-tight" style={{ color: 'var(--tp-text-3)' }}>
+          The readings generated by EdgeFinder are for informational purposes only, do not constitute financial advice.
         </span>
       </div>
 
       {/* ─── Main 2-Column Grid ─────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-[370px_1fr] min-h-0">
         {/* ═══ LEFT COLUMN ═══════════════════════════════════════════ */}
-        <div className="border-r border-[#1E2433]">
+        <div style={{ borderRight: '1px solid var(--tp-border-subtle)' }}>
           {/* Symbol Dropdown Selector */}
-          <div className="px-3 py-2 border-b border-[#1E2433]" ref={dropdownRef}>
+          <div className="px-3 py-2" style={{ borderBottom: '1px solid var(--tp-border-subtle)' }} ref={dropdownRef}>
             <div className="relative">
               <button
                 onClick={() => { setDropdownOpen(!dropdownOpen); setSearchQuery(''); }}
@@ -639,7 +642,7 @@ export default function AssetProfile() {
                       <input
                         type="text"
                         placeholder="Search symbols..."
-                        className="w-full bg-[#0E1116] pl-7 pr-2 py-1.5 text-[12px] text-[#E6E9F0] placeholder-[#5A6375] focus:outline-none border border-[#2A3040] rounded focus:border-[#4C6FFF] transition-colors"
+                        className="w-full bg-[#14161C] pl-7 pr-2 py-1.5 text-[12px] text-[#E6E9F0] placeholder-[#5A6375] focus:outline-none border border-[#2A3040] rounded focus:border-[#4C6FFF] transition-colors"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         autoFocus
@@ -647,7 +650,7 @@ export default function AssetProfile() {
                     </div>
                   </div>
                   {/* Column headers */}
-                  <div className="grid grid-cols-2 px-3 py-[3px] border-b border-[#1E2433]" style={{ backgroundColor: '#0E1116' }}>
+                  <div className="grid grid-cols-2 px-3 py-[3px] border-b border-[#1E2433]" style={{ backgroundColor: '#14161C' }}>
                     <span className="text-[10px] text-[#5A6375]" style={{ fontWeight: 500 }}>SYMBOL</span>
                     <span className="text-[10px] text-[#5A6375] text-right" style={{ fontWeight: 500 }}>SCORE</span>
                   </div>
@@ -697,7 +700,7 @@ export default function AssetProfile() {
           {/* ─── Score Over Time Chart ───────────────────────────────── */}
           <div className="px-3 pt-2 pb-1 border-b border-[#1E2433]">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[11px] text-[#6F7A90]" style={{ fontWeight: 500 }}>NYX score over time</span>
+              <span className="text-[11px] text-[#6F7A90]" style={{ fontWeight: 500 }}>EdgeFinder score over time</span>
             </div>
             <div className="relative">
               {/* Bullish / Bearish labels */}
@@ -786,11 +789,11 @@ export default function AssetProfile() {
                   {bias}
                 </div>
               </div>
-              <Gauge score={data.nyxScore} />
+              <Gauge score={data.edgeFinderScore} />
               {/* Score breakdown */}
               <div className="w-full max-w-[260px] mt-1 space-y-0">
                 {([
-                  ['NYX score', data.nyxScore],
+                  ['EdgeFinder score', data.edgeFinderScore],
                   ['Technical score', data.technicalScore],
                   ['Sentiment + COT score', data.sentimentCotScore],
                   ['Fundamentals score', data.fundamentalsScore],

@@ -10,9 +10,6 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
-  preview: {
-    allowedHosts: ['implemented-fiscal-priority-plain.trycloudflare.com', '.trycloudflare.com'],
-  },
   resolve: {
     alias: {
       // Alias @ to the src directory

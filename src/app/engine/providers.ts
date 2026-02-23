@@ -384,38 +384,43 @@ const MOCK_MACRO_DATA: Array<{
   { economy: 'US', key: 'jolts', name: 'JOLTS Job Openings', category: 'jobs', actual: 8900, forecast: 9100, previous: 9200, unit: 'K', impact: 'medium' },
   { economy: 'US', key: 'interest_rate', name: 'Fed Funds Rate', category: 'rates', actual: 4.50, forecast: 4.50, previous: 4.75, unit: '%', impact: 'high' },
 
-  // EU
-  { economy: 'EU', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.3, forecast: 0.2, previous: 0.1, unit: '%', impact: 'high' },
-  { economy: 'EU', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 46.6, forecast: 47.0, previous: 46.0, unit: 'index', impact: 'high' },
-  { economy: 'EU', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 51.6, forecast: 51.0, previous: 50.8, unit: 'index', impact: 'high' },
-  { economy: 'EU', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 2.4, forecast: 2.3, previous: 2.2, unit: '%', impact: 'high' },
-  { economy: 'EU', key: 'interest_rate', name: 'ECB Main Rate', category: 'rates', actual: 3.75, forecast: 3.75, previous: 4.00, unit: '%', impact: 'high' },
+  // EU — Updated Feb 2025 (ECB cut to 2.90%, inflation near target)
+  { economy: 'EU', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.4, forecast: 0.3, previous: 0.3, unit: '%', impact: 'high' },
+  { economy: 'EU', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 47.3, forecast: 46.8, previous: 46.6, unit: 'index', impact: 'high' },
+  { economy: 'EU', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 51.3, forecast: 51.0, previous: 51.6, unit: 'index', impact: 'high' },
+  { economy: 'EU', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 2.5, forecast: 2.4, previous: 2.4, unit: '%', impact: 'high' },
+  { economy: 'EU', key: 'interest_rate', name: 'ECB Deposit Rate', category: 'rates', actual: 2.90, forecast: 2.90, previous: 3.15, unit: '%', impact: 'high' },
 
-  // UK
+  // UK — Updated Feb 2025 (BoE cut to 4.50%, CPI sticky)
   { economy: 'UK', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.1, forecast: 0.2, previous: 0.0, unit: '%', impact: 'high' },
-  { economy: 'UK', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 3.4, forecast: 3.2, previous: 3.4, unit: '%', impact: 'high' },
-  { economy: 'UK', key: 'interest_rate', name: 'BoE Bank Rate', category: 'rates', actual: 5.00, forecast: 5.00, previous: 5.25, unit: '%', impact: 'high' },
+  { economy: 'UK', key: 'pmi_composite', name: 'Composite PMI', category: 'growth', actual: 50.5, forecast: 50.8, previous: 50.6, unit: 'index', impact: 'high' },
+  { economy: 'UK', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 2.5, forecast: 2.6, previous: 2.6, unit: '%', impact: 'high' },
+  { economy: 'UK', key: 'interest_rate', name: 'BoE Bank Rate', category: 'rates', actual: 4.50, forecast: 4.50, previous: 4.75, unit: '%', impact: 'high' },
 
-  // JP
-  { economy: 'JP', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.5, forecast: 0.3, previous: -0.1, unit: '%', impact: 'high' },
-  { economy: 'JP', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 2.9, forecast: 2.7, previous: 2.6, unit: '%', impact: 'high' },
-  { economy: 'JP', key: 'interest_rate', name: 'BoJ Policy Rate', category: 'rates', actual: 0.25, forecast: 0.25, previous: 0.10, unit: '%', impact: 'high' },
+  // JP — Updated Feb 2025 (BoJ raised to 0.50% in Jan 2025, CPI elevated)
+  { economy: 'JP', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.3, forecast: 0.2, previous: 0.2, unit: '%', impact: 'high' },
+  { economy: 'JP', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 3.6, forecast: 3.4, previous: 3.0, unit: '%', impact: 'high' },
+  { economy: 'JP', key: 'interest_rate', name: 'BoJ Policy Rate', category: 'rates', actual: 0.50, forecast: 0.50, previous: 0.25, unit: '%', impact: 'high' },
 
-  // AU
-  { economy: 'AU', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.2, forecast: 0.3, previous: 0.2, unit: '%', impact: 'high' },
-  { economy: 'AU', key: 'interest_rate', name: 'RBA Cash Rate', category: 'rates', actual: 4.35, forecast: 4.35, previous: 4.35, unit: '%', impact: 'high' },
+  // AU — Updated Feb 2025 (RBA cut in Feb 2025 to 4.10%)
+  { economy: 'AU', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.3, forecast: 0.3, previous: 0.2, unit: '%', impact: 'high' },
+  { economy: 'AU', key: 'cpi', name: 'CPI (QoQ)', category: 'inflation', actual: 0.6, forecast: 0.7, previous: 0.7, unit: '%', impact: 'high' },
+  { economy: 'AU', key: 'interest_rate', name: 'RBA Cash Rate', category: 'rates', actual: 4.10, forecast: 4.10, previous: 4.35, unit: '%', impact: 'high' },
 
-  // NZ
-  { economy: 'NZ', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: -0.1, forecast: 0.1, previous: -0.3, unit: '%', impact: 'high' },
-  { economy: 'NZ', key: 'interest_rate', name: 'RBNZ OCR', category: 'rates', actual: 4.75, forecast: 4.75, previous: 5.25, unit: '%', impact: 'high' },
+  // NZ — Updated Feb 2025 (RBNZ cut to 3.75%, in easing cycle)
+  { economy: 'NZ', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.2, forecast: 0.1, previous: -0.2, unit: '%', impact: 'high' },
+  { economy: 'NZ', key: 'cpi', name: 'CPI (QoQ)', category: 'inflation', actual: 0.5, forecast: 0.5, previous: 0.6, unit: '%', impact: 'high' },
+  { economy: 'NZ', key: 'interest_rate', name: 'RBNZ OCR', category: 'rates', actual: 3.75, forecast: 3.75, previous: 4.25, unit: '%', impact: 'high' },
 
-  // CA
-  { economy: 'CA', key: 'gdp', name: 'GDP (MoM)', category: 'growth', actual: 0.2, forecast: 0.1, previous: 0.0, unit: '%', impact: 'high' },
-  { economy: 'CA', key: 'interest_rate', name: 'BoC Rate', category: 'rates', actual: 3.75, forecast: 3.75, previous: 4.25, unit: '%', impact: 'high' },
+  // CA — Updated Feb 2025 (BoC cut to 3.00%, tariff uncertainty)
+  { economy: 'CA', key: 'gdp', name: 'GDP (MoM)', category: 'growth', actual: 0.2, forecast: 0.1, previous: 0.3, unit: '%', impact: 'high' },
+  { economy: 'CA', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 1.8, forecast: 1.9, previous: 1.8, unit: '%', impact: 'high' },
+  { economy: 'CA', key: 'interest_rate', name: 'BoC Rate', category: 'rates', actual: 3.00, forecast: 3.00, previous: 3.25, unit: '%', impact: 'high' },
 
-  // CH
-  { economy: 'CH', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.4, forecast: 0.3, previous: 0.3, unit: '%', impact: 'high' },
-  { economy: 'CH', key: 'interest_rate', name: 'SNB Policy Rate', category: 'rates', actual: 1.50, forecast: 1.50, previous: 1.75, unit: '%', impact: 'high' },
+  // CH — Updated Feb 2025 (SNB cut to 0.50%, deflation risk)
+  { economy: 'CH', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.2, forecast: 0.2, previous: 0.3, unit: '%', impact: 'high' },
+  { economy: 'CH', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 0.4, forecast: 0.5, previous: 0.6, unit: '%', impact: 'high' },
+  { economy: 'CH', key: 'interest_rate', name: 'SNB Policy Rate', category: 'rates', actual: 0.50, forecast: 0.50, previous: 1.00, unit: '%', impact: 'high' },
 ];
 
 export class MockMacroProvider implements IMacroProvider {
@@ -485,15 +490,16 @@ export class MockMacroProvider implements IMacroProvider {
 
 // ─── MOCK RATE PROVIDER ─────────────────────────────────────────────────────
 
+// Updated February 2025 — reflects actual central bank rates and yield curves
 const MOCK_RATES: Record<string, { policy: number; y2: number; y10: number; y30: number }> = {
-  'US': { policy: 4.50, y2: 4.25, y10: 4.18, y30: 4.35 },
-  'EU': { policy: 3.75, y2: 2.80, y10: 2.45, y30: 2.65 },
-  'UK': { policy: 5.00, y2: 4.50, y10: 4.15, y30: 4.60 },
-  'JP': { policy: 0.25, y2: 0.30, y10: 0.95, y30: 1.75 },
-  'AU': { policy: 4.35, y2: 3.80, y10: 4.10, y30: 4.35 },
-  'NZ': { policy: 4.75, y2: 4.20, y10: 4.50, y30: 4.65 },
-  'CA': { policy: 3.75, y2: 3.40, y10: 3.25, y30: 3.45 },
-  'CH': { policy: 1.50, y2: 0.85, y10: 0.65, y30: 0.80 },
+  'US': { policy: 4.33, y2: 4.20, y10: 4.50, y30: 4.75 },  // Fed paused (4.25-4.50%)
+  'EU': { policy: 2.90, y2: 2.40, y10: 2.70, y30: 2.85 },  // ECB: -100bps in 2024/25
+  'UK': { policy: 4.50, y2: 4.15, y10: 4.60, y30: 5.25 },  // BoE cut Feb 2025
+  'JP': { policy: 0.50, y2: 0.68, y10: 1.50, y30: 2.55 },  // BoJ hike Jan 2025
+  'AU': { policy: 4.10, y2: 3.85, y10: 4.40, y30: 4.70 },  // RBA cut Feb 2025
+  'NZ': { policy: 3.75, y2: 3.50, y10: 4.35, y30: 4.60 },  // RBNZ easing cycle
+  'CA': { policy: 3.00, y2: 2.85, y10: 3.30, y30: 3.55 },  // BoC: -200bps from peak
+  'CH': { policy: 0.50, y2: 0.40, y10: 0.65, y30: 0.85 },  // SNB cut Dec 2024
 };
 
 export class MockRateProvider implements IRateProvider {

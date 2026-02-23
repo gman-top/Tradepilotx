@@ -43,12 +43,9 @@ import {
   type AssetDataSnapshot,
 } from './scoringEngine';
 
-import {
-  MockCOTProvider,
-  MockSentimentProvider,
-  MockMacroProvider,
-  MockRateProvider,
-} from './providers';
+import type { IPriceProvider } from './providers';
+import { createLiveRegistry } from './liveProviders';
+import { computeTechnicals } from './liveProviders';
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -227,10 +224,13 @@ function buildSeasonality(symbol: string): SeasonalityStat {
 // SNAPSHOT BUILDER — Assembles data for one asset
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const cotProvider = new MockCOTProvider();
-const sentimentProvider = new MockSentimentProvider();
-const macroProvider = new MockMacroProvider();
-const rateProvider = new MockRateProvider();
+// Initialize live registry (CFTC direct + FRED + TwelveData + Myfxbook)
+const _registry = createLiveRegistry();
+const cotProvider = _registry.cot;
+const sentimentProvider = _registry.sentiment;
+const macroProvider = _registry.macro;
+const rateProvider = _registry.rates;
+const priceProvider: IPriceProvider = _registry.price;
 
 async function buildSnapshot(def: AssetDef): Promise<AssetDataSnapshot> {
   const { asset, links, cotSymbol } = def;
@@ -274,10 +274,38 @@ async function buildSnapshot(def: AssetDef): Promise<AssetDataSnapshot> {
     Object.assign(interestRates, rateResult.data);
   }
 
+  // Real price data for technical indicators
+  let technical = buildTechnical(asset.symbol); // fallback to mock
+  try {
+    const ohlcResult = await priceProvider.fetchOHLC(asset.symbol, '1d', 200);
+    if (ohlcResult.ok && ohlcResult.data.length >= 20) {
+      const closes = ohlcResult.data.map(b => b.close);
+      const t = computeTechnicals(closes);
+      const latestPrice = closes[closes.length - 1];
+      technical = {
+        asset_id: 0,
+        timestamp: new Date().toISOString(),
+        timeframe: '1d',
+        sma_20:   t.sma20,
+        sma_50:   t.sma50,
+        sma_100:  t.sma100,
+        sma_200:  t.sma200,
+        rsi_14:   t.rsi14,
+        atr_14:   null as any,
+        volatility: null as any,
+        trend_4h:       t.trend4h,
+        trend_daily:    t.trendDaily,
+        price_vs_sma200: t.priceVsSma200,
+      };
+    }
+  } catch {
+    // Keep mock technical on failure
+  }
+
   return {
     asset,
     economy_links: links,
-    technical: buildTechnical(asset.symbol),
+    technical,
     cot_latest: cotLatest,
     cot_history: cotHistory,
     sentiment,

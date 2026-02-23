@@ -1,17 +1,17 @@
-// CFTC SODA API DATA SERVICE — via Supabase Edge Function Proxy
+// CFTC SODA API DATA SERVICE — Direct browser → CFTC (no proxy needed)
 // Fetches live Commitments of Traders data from the CFTC's public Socrata Open Data API
 // Dataset: Legacy Futures Only (6dca-aqww)
 //
 // ARCHITECTURE:
 // 1. Symbol mappings imported from cotMappings.ts (single source of truth)
-// 2. Fetches raw CFTC data via Supabase Edge Function proxy (bypasses CORS)
+// 2. Fetches raw CFTC data DIRECTLY from CFTC SODA API (supports CORS)
 // 3. Transforms to existing COTLatestRow / COTWeeklyRow interfaces
 // 4. Caches in memory (data only updates weekly)
 // 5. Falls back gracefully with empty data on failure
 //
-// PROXY ROUTES (server-side, no CORS issues):
-//   POST /make-server-d198f9ee/cftc/batch   — batch all symbols (All Assets view)
-//   GET  /make-server-d198f9ee/cftc/history  — single symbol history (Symbol view)
+// NOTE: The Supabase Edge Function proxy was removed — CFTC SODA API
+// supports CORS (Access-Control-Allow-Origin: *) so we call it directly.
+// Direct URL: https://publicreporting.cftc.gov/resource/6dca-aqww.json
 
 import {
   CFTC_MARKET_PATTERNS,
@@ -25,13 +25,11 @@ import {
   buildPercentilesCacheKey,
 } from './cotCache';
 
-import { projectId, publicAnonKey } from '/utils/supabase/info';
-
 // Re-export so existing consumers don't break
 export { CFTC_MARKET_PATTERNS, COT_AVAILABLE_SYMBOLS };
 
-// ─── Proxy Base URL ──────────────────────────────────────────────────────────
-const PROXY_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-d198f9ee/cftc`;
+// ─── Direct CFTC SODA API URL ────────────────────────────────────────────────
+const CFTC_SODA_URL = 'https://publicreporting.cftc.gov/resource/6dca-aqww.json';
 
 // ─── Raw CFTC API Response Type ──────────────────────────────────────────────
 export interface CFTCRawRow {
@@ -152,23 +150,39 @@ function formatOI(value: number): string {
   return value.toString();
 }
 
-// ─── PROXY FETCH HELPERS ─────────────────────────────────────────────────────
+// ─── DIRECT CFTC FETCH HELPERS ───────────────────────────────────────────────
 
-/** Standard headers for all proxy requests */
-function proxyHeaders(): HeadersInit {
-  return {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${publicAnonKey}`,
-    'apikey': publicAnonKey,
-  };
+function escapeSoQL(val: string): string {
+  return val.replace(/'/g, "''");
+}
+
+function buildCFTCUrl(pattern: string, limit: number): string {
+  const url = new URL(CFTC_SODA_URL);
+  url.searchParams.set('$where', `market_and_exchange_names like '${escapeSoQL(pattern)}'`);
+  url.searchParams.set('$order', 'report_date_as_yyyy_mm_dd DESC');
+  url.searchParams.set('$limit', String(limit));
+  return url.toString();
+}
+
+async function fetchCFTCDirect(pattern: string, limit: number): Promise<CFTCRawRow[]> {
+  const url = buildCFTCUrl(pattern, limit);
+  const res = await fetch(url, {
+    headers: { 'Accept': 'application/json' },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`CFTC ${res.status}: ${text}`);
+  }
+  return res.json();
 }
 
 // ─── CORE FETCH FUNCTIONS ────────────────────────────────────────────────────
 
 /**
  * Fetch historical COT data for a single asset (Symbol View)
- * Routes through Supabase Edge Function → CFTC SODA API
- * Returns up to 156 weeks (3 years) of weekly data for the given symbol
+ * Calls CFTC SODA API directly — supports CORS, no proxy needed.
+ * Returns up to 156 weeks (3 years) of weekly data for the given symbol.
  */
 export async function fetchAssetHistory(
   spotSymbol: string,
@@ -183,27 +197,14 @@ export async function fetchAssetHistory(
   if (!pattern) return { data: [], source: 'error' };
 
   try {
-    const url = `${PROXY_BASE}/history?symbol=${encodeURIComponent(spotSymbol)}&pattern=${encodeURIComponent(pattern)}&limit=${weeks}`;
+    console.log(`[COT Service] Fetching history for ${spotSymbol} direct from CFTC...`);
 
-    console.log(`[COT Service] Fetching history for ${spotSymbol} via proxy...`);
+    const rawRows = await fetchCFTCDirect(pattern, weeks);
 
-    const response = await fetch(url, {
-      headers: proxyHeaders(),
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`Proxy returned ${response.status}: ${text}`);
-    }
-
-    const json = await response.json();
-
-    if (!json.ok || !json.data || json.data.length === 0) {
-      console.warn(`[COT Service] Proxy returned no data for ${spotSymbol}`);
+    if (!rawRows || rawRows.length === 0) {
+      console.warn(`[COT Service] No data from CFTC for ${spotSymbol}`);
       return { data: [], source: 'error' };
     }
-
-    const rawRows: CFTCRawRow[] = json.data;
 
     // Transform to COTWeeklyRowLive
     const rows: COTWeeklyRowLive[] = rawRows.map((raw, index) => {
@@ -211,7 +212,6 @@ export async function fetchAssetHistory(
       const total = pos.longContracts + pos.shortContracts;
       const netPosition = pos.longContracts - pos.shortContracts;
 
-      // Calculate netChangePct using the NEXT row (previous week) as baseline
       let netChangePct = 0;
       if (index < rawRows.length - 1) {
         const prevPos = extractTraderPositions(rawRows[index + 1], traderType);
@@ -234,7 +234,7 @@ export async function fetchAssetHistory(
       };
     });
 
-    console.log(`[COT Service] History for ${spotSymbol}: ${rows.length} weeks fetched LIVE`);
+    console.log(`[COT Service] History for ${spotSymbol}: ${rows.length} weeks fetched LIVE from CFTC`);
 
     dataCache.set(cacheKey, rows);
     return { data: rows, source: 'live' };
@@ -246,7 +246,8 @@ export async function fetchAssetHistory(
 
 /**
  * Fetch latest COT data for ALL tracked assets (All Assets View)
- * Uses the batch proxy endpoint — ONE request from browser, 19 from server to CFTC
+ * Calls CFTC API directly in parallel — no proxy needed.
+ * CORS is supported by CFTC SODA API (government open data).
  */
 export async function fetchAllAssetsLatest(
   traderType: TraderType
@@ -256,32 +257,34 @@ export async function fetchAllAssetsLatest(
   if (cached) return { ...cached, source: 'live' };
 
   try {
-    // Build symbols array for batch request
-    const symbols = COT_AVAILABLE_SYMBOLS.map(symbol => ({
-      symbol,
-      pattern: CFTC_MARKET_PATTERNS[symbol],
-    })).filter(s => s.pattern);
+    console.log(`[COT Service] Batch fetch for ${COT_AVAILABLE_SYMBOLS.length} symbols direct from CFTC...`);
 
-    console.log(`[COT Service] Batch fetch for ${symbols.length} symbols via proxy...`);
+    const batchResults: Record<string, CFTCRawRow[]> = {};
+    const errors: string[] = [];
 
-    const response = await fetch(`${PROXY_BASE}/batch`, {
-      method: 'POST',
-      headers: proxyHeaders(),
-      body: JSON.stringify({ symbols, limit: 2 }),
-    });
+    // Fetch all symbols in parallel (6 at a time to be respectful)
+    const batchSize = 6;
+    const symbols = COT_AVAILABLE_SYMBOLS.filter(s => CFTC_MARKET_PATTERNS[s]);
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      throw new Error(`Batch proxy returned ${response.status}: ${text}`);
+    for (let i = 0; i < symbols.length; i += batchSize) {
+      const batch = symbols.slice(i, i + batchSize);
+      await Promise.allSettled(
+        batch.map(async (symbol) => {
+          try {
+            const pattern = CFTC_MARKET_PATTERNS[symbol];
+            const rows = await fetchCFTCDirect(pattern, 2);
+            batchResults[symbol] = rows || [];
+          } catch (err) {
+            errors.push(symbol);
+            batchResults[symbol] = [];
+          }
+        })
+      );
+      // Small delay between batches
+      if (i + batchSize < symbols.length) {
+        await new Promise(r => setTimeout(r, 200));
+      }
     }
-
-    const json = await response.json();
-
-    if (!json.ok || !json.results) {
-      throw new Error(json.error || 'Batch proxy returned invalid response');
-    }
-
-    const batchResults: Record<string, CFTCRawRow[]> = json.results;
 
     const results: COTLatestRowLive[] = [];
     let latestReportDate = '';
@@ -298,7 +301,6 @@ export async function fetchAllAssetsLatest(
       const oi = parseInt(currentRaw.open_interest_all || '0', 10);
       const deltaOI = parseInt(currentRaw.change_in_open_interest_all || '0', 10);
 
-      // Calculate netChangePct
       let netChangePct = 0;
       if (rawRows.length > 1) {
         const prevPos = extractTraderPositions(rawRows[1], traderType);
@@ -308,14 +310,12 @@ export async function fetchAllAssetsLatest(
         }
       }
 
-      // Track latest report date
-      const reportDate = formatCFTCDate(currentRaw.report_date_as_yyyy_mm_dd);
-      if (!latestReportDate || new Date(currentRaw.report_date_as_yyyy_mm_dd) > new Date(latestReportDate)) {
-        latestReportDate = currentRaw.report_date_as_yyyy_mm_dd;
+      const reportDateRaw = currentRaw.report_date_as_yyyy_mm_dd;
+      if (!latestReportDate || new Date(reportDateRaw) > new Date(latestReportDate)) {
+        latestReportDate = reportDateRaw;
       }
 
       successCount++;
-
       results.push({
         asset: symbol,
         netChangePct: Math.round(netChangePct * 100) / 100,
@@ -329,11 +329,11 @@ export async function fetchAllAssetsLatest(
         starred: false,
         openInterest: formatOI(oi),
         deltaOI,
-        reportDate,
+        reportDate: formatCFTCDate(reportDateRaw),
       });
     }
 
-    console.log(`[COT Service] Batch complete: ${successCount}/${COT_AVAILABLE_SYMBOLS.length} symbols fetched LIVE`);
+    console.log(`[COT Service] Batch complete: ${successCount}/${COT_AVAILABLE_SYMBOLS.length} symbols fetched LIVE from CFTC`);
 
     if (results.length === 0) {
       return { data: [], source: 'error', reportDate: '' };

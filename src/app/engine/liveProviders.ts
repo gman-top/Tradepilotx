@@ -404,16 +404,17 @@ const FRED_YIELD_SERIES: Record<string, string> = {
   yield_30y:   'DGS30',
 };
 
-// Updated central bank rates and government bond yields — February 2025
-// Source: ECB, BoE, BoJ, RBA, RBNZ, BoC, SNB official announcements
+// Updated central bank rates and government bond yields — February 2026
+// Source: ECB (Feb 5 decision), BoE (Feb 4 decision), BoJ (Jan 23 hold), RBA (Feb 3 hike),
+//         RBNZ (Feb hold), BoC (Jan 28 hold), SNB (held at 0% since Jun 2025)
 const NON_US_RATES_2025: Record<string, { policy: number; y2: number; y5: number; y10: number; y30: number }> = {
-  'EU': { policy: 2.90, y2: 2.40, y5: 2.55, y10: 2.70, y30: 2.85 },  // ECB: -100bps in 2024
-  'UK': { policy: 4.50, y2: 4.15, y5: 4.30, y10: 4.60, y30: 5.25 },  // BoE cut Feb 2025
-  'JP': { policy: 0.50, y2: 0.68, y5: 1.02, y10: 1.50, y30: 2.55 },  // BoJ hike Jan 2025
-  'AU': { policy: 4.10, y2: 3.85, y5: 4.00, y10: 4.40, y30: 4.70 },  // RBA cut Feb 2025
-  'NZ': { policy: 3.75, y2: 3.50, y5: 3.90, y10: 4.35, y30: 4.60 },  // RBNZ cutting cycle
-  'CA': { policy: 3.00, y2: 2.85, y5: 3.00, y10: 3.30, y30: 3.55 },  // BoC: -200bps from peak
-  'CH': { policy: 0.50, y2: 0.40, y5: 0.50, y10: 0.65, y30: 0.85 },  // SNB cut Dec 2024
+  'EU': { policy: 2.15, y2: 2.09, y5: 2.30, y10: 2.70, y30: 2.90 },  // ECB held at MRO 2.15% / deposit 2.00% (5th consecutive hold; 8 total cuts from 4%)
+  'UK': { policy: 3.75, y2: 3.57, y5: 3.90, y10: 4.32, y30: 5.00 },  // BoE held at 3.75% (5-4 vote Feb 2026; -150bps since Aug 2024)
+  'JP': { policy: 0.75, y2: 1.22, y5: 1.60, y10: 2.10, y30: 2.90 },  // BoJ held at 0.75% (Jan 2026; hiked from 0.50% Dec 2025)
+  'AU': { policy: 3.85, y2: 3.70, y5: 4.00, y10: 4.45, y30: 4.80 },  // RBA hiked +25bps to 3.85% (Feb 3, 2026; first hike since 2023)
+  'NZ': { policy: 2.25, y2: 2.15, y5: 3.00, y10: 3.75, y30: 4.20 },  // RBNZ held at 2.25% (Feb 2026; deep cutting cycle from 5.50%)
+  'CA': { policy: 2.25, y2: 2.50, y5: 2.80, y10: 3.20, y30: 3.50 },  // BoC held at 2.25% (Jan 28, 2026; -225bps from peak)
+  'CH': { policy: 0.00, y2: 0.25, y5: 0.40, y10: 0.65, y30: 0.90 },  // SNB at 0% (cut to 0% Jun 2025; expected stable all 2026)
 };
 
 export class FREDRateProvider implements IRateProvider {
@@ -449,12 +450,12 @@ export class FREDRateProvider implements IRateProvider {
           results['US'] = {
             economy_id: 0,
             timestamp: now,
-            policy_rate: usRates.policy_rate ?? 4.33,
-            yield_2y:    usRates.yield_2y   ?? 4.20,
-            yield_5y:    usRates.yield_5y   ?? 4.25,
+            policy_rate: usRates.policy_rate ?? 3.63,  // Fed: 3.50-3.75% range (Feb 2026)
+            yield_2y:    usRates.yield_2y   ?? 4.00,
+            yield_5y:    usRates.yield_5y   ?? 4.20,
             yield_10y:   usRates.yield_10y  ?? 4.50,
             yield_30y:   usRates.yield_30y  ?? 4.75,
-            spread_2_10: (usRates.yield_10y ?? 4.50) - (usRates.yield_2y ?? 4.20),
+            spread_2_10: (usRates.yield_10y ?? 4.50) - (usRates.yield_2y ?? 4.00),
             real_rate_10y: null,
             source: 'FRED',
           };
@@ -468,11 +469,11 @@ export class FREDRateProvider implements IRateProvider {
     for (const code of economyCodes) {
       if (code === 'US' && results['US']) continue;
       if (code === 'US') {
-        // FRED failed, use reasonable defaults
+        // FRED failed, use Feb 2026 fallback (Fed at 3.50-3.75% range; midpoint ~3.63%)
         results['US'] = {
           economy_id: 0, timestamp: now,
-          policy_rate: 4.33, yield_2y: 4.20, yield_5y: 4.25, yield_10y: 4.50, yield_30y: 4.75,
-          spread_2_10: 0.30, real_rate_10y: null, source: 'fallback',
+          policy_rate: 3.63, yield_2y: 4.00, yield_5y: 4.20, yield_10y: 4.50, yield_30y: 4.75,
+          spread_2_10: 0.50, real_rate_10y: null, source: 'fallback',
         };
         continue;
       }

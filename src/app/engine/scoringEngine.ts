@@ -129,6 +129,33 @@ function scoreTrend(tech: TechnicalIndicator | null, timeframe: '4h' | 'daily'):
   };
 }
 
+function scoreRSI(tech: TechnicalIndicator | null): SignalInput | null {
+  if (!tech || tech.rsi_14 === null) return null;
+
+  const rsi = tech.rsi_14;
+
+  // Momentum confirmation (trend-following interpretation):
+  // High RSI confirms uptrend; low RSI confirms downtrend.
+  let score: -2 | -1 | 0 | 1 | 2 = 0;
+  if (rsi >= 70)      score =  2;  // Strong bullish momentum / overbought extension
+  else if (rsi >= 55) score =  1;  // Mild bullish momentum
+  else if (rsi <= 30) score = -2;  // Strong bearish momentum / oversold extension
+  else if (rsi <= 45) score = -1;  // Mild bearish momentum
+
+  const label = rsi >= 70 ? 'strong momentum' : rsi <= 30 ? 'weak momentum' : rsi >= 55 ? 'bullish' : rsi <= 45 ? 'bearish' : 'neutral';
+
+  return {
+    metric_key: METRIC_KEYS.RSI_14,
+    category: 'technical',
+    raw_value: rsi,
+    direction: scoreToDirection(score),
+    score,
+    confidence: 1.0,
+    explanation: `RSI(14): ${rsi.toFixed(1)} — ${label}`,
+    source_timestamp: tech.timestamp,
+  };
+}
+
 function scoreSMAAlignment(tech: TechnicalIndicator | null): SignalInput | null {
   if (!tech) return null;
 
@@ -385,19 +412,68 @@ function scoreSeasonality(stat: SeasonalityStat | null): SignalInput | null {
 function scoreInterestRate(rate: InterestRate | null, economyCode: string): EconomySignal | null {
   if (!rate || rate.policy_rate === null) return null;
 
-  // Interest rates are relative — higher rate = more attractive currency
-  // The absolute rate isn't scored here; the carry trade scanner handles that.
-  // For the scorecard, we use the rate direction (hawkish/dovish stance).
-  // This is a simplified version — real implementation would track rate change expectations.
+  const policyRate = rate.policy_rate;
+
+  // Score based on absolute rate level (higher rate = more attractive via carry trade).
+  // Pair-relative logic in scoreFXMacro handles the differential.
+  // Thresholds calibrated to Feb 2026 rate environment:
+  //   >= 4.0%  → +2  (extreme carry advantage: e.g. 4.5%+ range)
+  //   >= 2.5%  → +1  (carry positive: US ~3.6%, UK ~3.75%, AU ~3.85%)
+  //   >= 1.0%  →  0  (moderate/neutral: EU ~2.15%, NZ ~2.25%, CA ~2.25%)
+  //   >= 0.25% → -1  (low: JP ~0.75%)
+  //   <  0.25% → -2  (ZIRP/near-zero: CH ~0.00%)
+  let rateScore: -2 | -1 | 0 | 1 | 2 = 0;
+  if (policyRate >= 4.0)       rateScore =  2;
+  else if (policyRate >= 2.5)  rateScore =  1;
+  else if (policyRate >= 1.0)  rateScore =  0;
+  else if (policyRate >= 0.25) rateScore = -1;
+  else                         rateScore = -2;
+
+  const label = rateScore === 2 ? 'very high'
+    : rateScore === 1 ? 'high'
+    : rateScore === 0 ? 'moderate'
+    : rateScore === -1 ? 'low'
+    : 'near-zero';
 
   return {
     metric_key: METRIC_KEYS.INTEREST_RATE,
     category: 'rates',
-    raw_value: rate.policy_rate,
-    direction: 'neutral',  // Needs context of rate change expectation
-    score: 0,
+    raw_value: policyRate,
+    direction: scoreToDirection(rateScore),
+    score: rateScore,
     confidence: 1.0,
-    explanation: `${economyCode} policy rate: ${rate.policy_rate.toFixed(2)}%`,
+    explanation: `${economyCode} policy rate: ${policyRate.toFixed(2)}% (${label} carry)`,
+    source_timestamp: rate.timestamp,
+    economy_code: economyCode,
+  };
+}
+
+
+// ─── YIELD CURVE SCORER ─────────────────────────────────────────────────────
+
+function scoreYieldCurve(rate: InterestRate | null, economyCode: string): EconomySignal | null {
+  if (!rate || rate.spread_2_10 === null) return null;
+
+  const spread = rate.spread_2_10; // 10Y minus 2Y yield
+
+  // Positive/steep curve → growth expectations → bullish
+  // Inverted curve → recession signal → bearish
+  let score: -2 | -1 | 0 | 1 | 2 = 0;
+  if (spread >= 1.0)       score =  2;  // Steep normal: strong growth signal
+  else if (spread >= 0.25) score =  1;  // Mild positive: growth leaning
+  else if (spread <= -1.0) score = -2;  // Deeply inverted: strong recession risk
+  else if (spread <= -0.25) score = -1; // Inverted: mild recession warning
+
+  const label = score === 2 ? 'steep (growth)' : score === 1 ? 'positive' : score === 0 ? 'flat' : score === -1 ? 'inverted' : 'deeply inverted';
+
+  return {
+    metric_key: METRIC_KEYS.YIELD_CURVE,
+    category: 'rates',
+    raw_value: spread,
+    direction: scoreToDirection(score),
+    score,
+    confidence: (rate.yield_10y !== null && rate.yield_2y !== null) ? 1.0 : 0.5,
+    explanation: `${economyCode} yield curve (2-10): ${spread >= 0 ? '+' : ''}${spread.toFixed(2)}% — ${label}`,
     source_timestamp: rate.timestamp,
     economy_code: economyCode,
   };
@@ -636,6 +712,9 @@ export function computeAssetScorecard(
   const sma = scoreSMAAlignment(snapshot.technical);
   if (sma) allSignals.push(sma);
 
+  const rsi = scoreRSI(snapshot.technical);
+  if (rsi) allSignals.push(rsi);
+
   if (snapshot.technical) freshness['technical'] = snapshot.technical.timestamp;
 
   // ─── 2. SEASONALITY ────────────────────────────────────────────────────
@@ -779,6 +858,18 @@ function scoreFXMacro(
     );
     allSignals.push(rateSignal);
   }
+
+  // Yield curve (pair-relative)
+  const baseYieldCurveSignal = scoreYieldCurve(baseRate, baseEcon);
+  const quoteYieldCurveSignal = scoreYieldCurve(quoteRate, quoteEcon);
+
+  if (baseYieldCurveSignal || quoteYieldCurveSignal) {
+    const curveSignal = computePairRelativeScore(
+      baseYieldCurveSignal, quoteYieldCurveSignal,
+      METRIC_KEYS.YIELD_CURVE, 'rates',
+    );
+    allSignals.push(curveSignal);
+  }
 }
 
 
@@ -848,6 +939,21 @@ function scoreNonFXMacro(
       confidence: rateSignal.confidence,
       explanation: rateSignal.explanation,
       source_timestamp: rateSignal.source_timestamp,
+    });
+  }
+
+  // Yield curve (single economy)
+  const yieldCurveSignal = scoreYieldCurve(rate, economyCode);
+  if (yieldCurveSignal) {
+    allSignals.push({
+      metric_key: yieldCurveSignal.metric_key,
+      category: yieldCurveSignal.category,
+      raw_value: yieldCurveSignal.raw_value,
+      direction: yieldCurveSignal.direction,
+      score: yieldCurveSignal.score,
+      confidence: yieldCurveSignal.confidence,
+      explanation: yieldCurveSignal.explanation,
+      source_timestamp: yieldCurveSignal.source_timestamp,
     });
   }
 }

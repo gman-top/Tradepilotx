@@ -359,6 +359,19 @@ export class FREDMacroProvider implements IMacroProvider {
         return this.mock.fetchReleases(economyCode, category, limit);
       }
 
+      // Supplement with mock data for US indicators FRED doesn't cover
+      // (ISM PMI Manufacturing/Services, ADP — these are proprietary, not on FRED)
+      const fredKeys = new Set(releases.map(r => r.indicator_key));
+      const NON_FRED_US_KEYS = ['pmi_manufacturing', 'pmi_services', 'adp'];
+      for (const missingKey of NON_FRED_US_KEYS) {
+        if (!fredKeys.has(missingKey)) {
+          const mockResult = await this.mock.fetchIndicator('US', missingKey);
+          if (mockResult.data) {
+            releases.push({ ...mockResult.data, source: 'mock-supplement' });
+          }
+        }
+      }
+
       lsSet(cacheKey, releases);
 
       let data = releases;

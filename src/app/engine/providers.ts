@@ -357,6 +357,11 @@ export class MockSentimentProvider implements ISentimentProvider {
 
 // ─── MOCK MACRO PROVIDER ────────────────────────────────────────────────────
 
+// ─── MOCK MACRO DATA — Updated February 2026 ────────────────────────────────
+// Consistent with central bank rate decisions in liveProviders.ts NON_US_RATES_2025.
+// US data: used as supplement for indicators FRED doesn't cover (PMI, ADP).
+// Non-US: primary source (FRED only covers US).
+// Keys match MACRO_SCORING_CONFIGS indicator_key exactly.
 const MOCK_MACRO_DATA: Array<{
   economy: string;
   key: string;
@@ -368,59 +373,87 @@ const MOCK_MACRO_DATA: Array<{
   unit: string;
   impact: ImpactLevel;
 }> = [
-  // US
-  { economy: 'US', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 2.8, forecast: 2.5, previous: 2.3, unit: '%', impact: 'high' },
-  { economy: 'US', key: 'pmi_manufacturing', name: 'ISM Manufacturing PMI', category: 'growth', actual: 49.3, forecast: 50.1, previous: 50.3, unit: 'index', impact: 'high' },
-  { economy: 'US', key: 'pmi_services', name: 'ISM Services PMI', category: 'growth', actual: 52.8, forecast: 52.0, previous: 51.5, unit: 'index', impact: 'high' },
-  { economy: 'US', key: 'retail_sales', name: 'Retail Sales (MoM)', category: 'growth', actual: 0.4, forecast: 0.3, previous: 0.1, unit: '%', impact: 'high' },
-  { economy: 'US', key: 'consumer_confidence', name: 'Consumer Confidence', category: 'confidence', actual: 104.1, forecast: 106.0, previous: 105.6, unit: 'index', impact: 'medium' },
-  { economy: 'US', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 3.1, forecast: 3.0, previous: 3.2, unit: '%', impact: 'high' },
-  { economy: 'US', key: 'ppi', name: 'PPI (MoM)', category: 'inflation', actual: 0.3, forecast: 0.2, previous: 0.1, unit: '%', impact: 'medium' },
+  // ── US — Supplement for non-FRED indicators (FRED covers GDP, CPI, PCE, PPI, NFP, unemployment, claims, retail sales, consumer confidence, JOLTS, rates)
+  { economy: 'US', key: 'gdp', name: 'GDP (QoQ Annualized)', category: 'growth', actual: 2.3, forecast: 2.0, previous: 3.1, unit: '%', impact: 'high' },
+  { economy: 'US', key: 'pmi_manufacturing', name: 'ISM Manufacturing PMI', category: 'growth', actual: 48.2, forecast: 49.0, previous: 49.3, unit: 'index', impact: 'high' },
+  { economy: 'US', key: 'pmi_services', name: 'ISM Services PMI', category: 'growth', actual: 54.1, forecast: 53.5, previous: 53.8, unit: 'index', impact: 'high' },
+  { economy: 'US', key: 'retail_sales', name: 'Retail Sales (MoM)', category: 'growth', actual: 0.3, forecast: 0.4, previous: 0.5, unit: '%', impact: 'high' },
+  { economy: 'US', key: 'consumer_confidence', name: 'Consumer Sentiment', category: 'confidence', actual: 67.8, forecast: 71.0, previous: 71.1, unit: 'index', impact: 'medium' },
+  { economy: 'US', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 2.9, forecast: 2.8, previous: 2.9, unit: '%', impact: 'high' },
+  { economy: 'US', key: 'ppi', name: 'PPI (MoM)', category: 'inflation', actual: 0.4, forecast: 0.3, previous: 0.2, unit: '%', impact: 'medium' },
   { economy: 'US', key: 'pce', name: 'Core PCE (MoM)', category: 'inflation', actual: 0.3, forecast: 0.2, previous: 0.2, unit: '%', impact: 'high' },
-  { economy: 'US', key: 'nfp', name: 'Non-Farm Payrolls', category: 'jobs', actual: 227, forecast: 200, previous: 186, unit: 'K', impact: 'high' },
-  { economy: 'US', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 4.2, forecast: 4.1, previous: 4.1, unit: '%', impact: 'high' },
-  { economy: 'US', key: 'initial_claims', name: 'Initial Jobless Claims', category: 'jobs', actual: 219, forecast: 225, previous: 220, unit: 'K', impact: 'medium' },
-  { economy: 'US', key: 'adp', name: 'ADP Employment Change', category: 'jobs', actual: 164, forecast: 150, previous: 143, unit: 'K', impact: 'medium' },
-  { economy: 'US', key: 'jolts', name: 'JOLTS Job Openings', category: 'jobs', actual: 8900, forecast: 9100, previous: 9200, unit: 'K', impact: 'medium' },
-  { economy: 'US', key: 'interest_rate', name: 'Fed Funds Rate', category: 'rates', actual: 4.50, forecast: 4.50, previous: 4.75, unit: '%', impact: 'high' },
+  { economy: 'US', key: 'nfp', name: 'Non-Farm Payrolls', category: 'jobs', actual: 143, forecast: 175, previous: 307, unit: 'K', impact: 'high' },
+  { economy: 'US', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 4.0, forecast: 4.1, previous: 4.1, unit: '%', impact: 'high' },
+  { economy: 'US', key: 'initial_claims', name: 'Initial Jobless Claims', category: 'jobs', actual: 213, forecast: 220, previous: 219, unit: 'K', impact: 'medium' },
+  { economy: 'US', key: 'adp', name: 'ADP Employment Change', category: 'jobs', actual: 183, forecast: 165, previous: 176, unit: 'K', impact: 'medium' },
+  { economy: 'US', key: 'jolts', name: 'JOLTS Job Openings', category: 'jobs', actual: 7600, forecast: 8000, previous: 8098, unit: 'K', impact: 'medium' },
+  { economy: 'US', key: 'interest_rate', name: 'Fed Funds Rate', category: 'rates', actual: 3.63, forecast: 3.63, previous: 3.88, unit: '%', impact: 'high' },
 
-  // EU — Updated Feb 2025 (ECB cut to 2.90%, inflation near target)
-  { economy: 'EU', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.4, forecast: 0.3, previous: 0.3, unit: '%', impact: 'high' },
-  { economy: 'EU', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 47.3, forecast: 46.8, previous: 46.6, unit: 'index', impact: 'high' },
-  { economy: 'EU', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 51.3, forecast: 51.0, previous: 51.6, unit: 'index', impact: 'high' },
-  { economy: 'EU', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 2.5, forecast: 2.4, previous: 2.4, unit: '%', impact: 'high' },
-  { economy: 'EU', key: 'interest_rate', name: 'ECB Deposit Rate', category: 'rates', actual: 2.90, forecast: 2.90, previous: 3.15, unit: '%', impact: 'high' },
+  // ── EU — ECB held at MRO 2.15% / deposit 2.00% (Feb 2026, 8 total cuts from 4%)
+  // Growth weak, manufacturing still contracting, services barely expanding, inflation near target
+  { economy: 'EU', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.1, forecast: 0.2, previous: 0.4, unit: '%', impact: 'high' },
+  { economy: 'EU', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 46.6, forecast: 46.0, previous: 45.1, unit: 'index', impact: 'high' },
+  { economy: 'EU', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 51.4, forecast: 51.0, previous: 51.2, unit: 'index', impact: 'high' },
+  { economy: 'EU', key: 'retail_sales', name: 'Retail Sales (MoM)', category: 'growth', actual: 0.1, forecast: 0.2, previous: -0.2, unit: '%', impact: 'medium' },
+  { economy: 'EU', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 2.4, forecast: 2.3, previous: 2.4, unit: '%', impact: 'high' },
+  { economy: 'EU', key: 'ppi', name: 'PPI (YoY)', category: 'inflation', actual: -0.8, forecast: -0.5, previous: -1.2, unit: '%', impact: 'medium' },
+  { economy: 'EU', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 6.3, forecast: 6.3, previous: 6.3, unit: '%', impact: 'medium' },
+  { economy: 'EU', key: 'interest_rate', name: 'ECB Main Refi Rate', category: 'rates', actual: 2.15, forecast: 2.15, previous: 2.40, unit: '%', impact: 'high' },
 
-  // UK — Updated Feb 2025 (BoE cut to 4.50%, CPI sticky)
+  // ── UK — BoE held at 3.75% (5-4 vote Feb 2026; -150bps since Aug 2024)
+  // Very weak growth, CPI sticky above target, manufacturing struggling
   { economy: 'UK', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.1, forecast: 0.2, previous: 0.0, unit: '%', impact: 'high' },
-  { economy: 'UK', key: 'pmi_composite', name: 'Composite PMI', category: 'growth', actual: 50.5, forecast: 50.8, previous: 50.6, unit: 'index', impact: 'high' },
-  { economy: 'UK', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 2.5, forecast: 2.6, previous: 2.6, unit: '%', impact: 'high' },
-  { economy: 'UK', key: 'interest_rate', name: 'BoE Bank Rate', category: 'rates', actual: 4.50, forecast: 4.50, previous: 4.75, unit: '%', impact: 'high' },
+  { economy: 'UK', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 48.3, forecast: 47.5, previous: 47.0, unit: 'index', impact: 'high' },
+  { economy: 'UK', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 50.8, forecast: 51.0, previous: 51.2, unit: 'index', impact: 'high' },
+  { economy: 'UK', key: 'retail_sales', name: 'Retail Sales (MoM)', category: 'growth', actual: -0.3, forecast: 0.1, previous: 0.3, unit: '%', impact: 'medium' },
+  { economy: 'UK', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 3.0, forecast: 2.8, previous: 2.5, unit: '%', impact: 'high' },
+  { economy: 'UK', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 4.4, forecast: 4.3, previous: 4.3, unit: '%', impact: 'medium' },
+  { economy: 'UK', key: 'interest_rate', name: 'BoE Bank Rate', category: 'rates', actual: 3.75, forecast: 3.75, previous: 4.00, unit: '%', impact: 'high' },
 
-  // JP — Updated Feb 2025 (BoJ raised to 0.50% in Jan 2025, CPI elevated)
-  { economy: 'JP', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.3, forecast: 0.2, previous: 0.2, unit: '%', impact: 'high' },
-  { economy: 'JP', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 3.6, forecast: 3.4, previous: 3.0, unit: '%', impact: 'high' },
-  { economy: 'JP', key: 'interest_rate', name: 'BoJ Policy Rate', category: 'rates', actual: 0.50, forecast: 0.50, previous: 0.25, unit: '%', impact: 'high' },
+  // ── JP — BoJ held at 0.75% (Jan 2026; hiked from 0.50% Dec 2025)
+  // Moderate growth, inflation persistently above BoJ target, hawkish tilt
+  { economy: 'JP', key: 'gdp', name: 'GDP (QoQ Annualized)', category: 'growth', actual: 1.2, forecast: 1.0, previous: 0.9, unit: '%', impact: 'high' },
+  { economy: 'JP', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 49.0, forecast: 49.5, previous: 49.6, unit: 'index', impact: 'high' },
+  { economy: 'JP', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 53.0, forecast: 52.5, previous: 52.7, unit: 'index', impact: 'high' },
+  { economy: 'JP', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 3.6, forecast: 3.3, previous: 3.4, unit: '%', impact: 'high' },
+  { economy: 'JP', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 2.4, forecast: 2.5, previous: 2.5, unit: '%', impact: 'medium' },
+  { economy: 'JP', key: 'interest_rate', name: 'BoJ Policy Rate', category: 'rates', actual: 0.75, forecast: 0.75, previous: 0.50, unit: '%', impact: 'high' },
 
-  // AU — Updated Feb 2025 (RBA cut in Feb 2025 to 4.10%)
-  { economy: 'AU', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.3, forecast: 0.3, previous: 0.2, unit: '%', impact: 'high' },
-  { economy: 'AU', key: 'cpi', name: 'CPI (QoQ)', category: 'inflation', actual: 0.6, forecast: 0.7, previous: 0.7, unit: '%', impact: 'high' },
-  { economy: 'AU', key: 'interest_rate', name: 'RBA Cash Rate', category: 'rates', actual: 4.10, forecast: 4.10, previous: 4.35, unit: '%', impact: 'high' },
+  // ── AU — RBA hiked +25bps to 3.85% (Feb 3, 2026; first hike since 2023)
+  // Inflation re-accelerated, tight labor market forced reversal of easing
+  { economy: 'AU', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.3, forecast: 0.4, previous: 0.2, unit: '%', impact: 'high' },
+  { economy: 'AU', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 50.6, forecast: 50.0, previous: 49.8, unit: 'index', impact: 'high' },
+  { economy: 'AU', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 51.2, forecast: 51.0, previous: 50.8, unit: 'index', impact: 'high' },
+  { economy: 'AU', key: 'cpi', name: 'CPI (QoQ)', category: 'inflation', actual: 0.9, forecast: 0.7, previous: 0.6, unit: '%', impact: 'high' },
+  { economy: 'AU', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 3.9, forecast: 4.0, previous: 4.0, unit: '%', impact: 'medium' },
+  { economy: 'AU', key: 'interest_rate', name: 'RBA Cash Rate', category: 'rates', actual: 3.85, forecast: 3.60, previous: 3.60, unit: '%', impact: 'high' },
 
-  // NZ — Updated Feb 2025 (RBNZ cut to 3.75%, in easing cycle)
-  { economy: 'NZ', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.2, forecast: 0.1, previous: -0.2, unit: '%', impact: 'high' },
-  { economy: 'NZ', key: 'cpi', name: 'CPI (QoQ)', category: 'inflation', actual: 0.5, forecast: 0.5, previous: 0.6, unit: '%', impact: 'high' },
-  { economy: 'NZ', key: 'interest_rate', name: 'RBNZ OCR', category: 'rates', actual: 3.75, forecast: 3.75, previous: 4.25, unit: '%', impact: 'high' },
+  // ── NZ — RBNZ held at 2.25% (Feb 2026; deep cutting cycle from 5.50%)
+  // Recession territory, deflation risk, aggressive easing completed
+  { economy: 'NZ', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: -0.2, forecast: 0.0, previous: -0.1, unit: '%', impact: 'high' },
+  { economy: 'NZ', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 46.5, forecast: 47.0, previous: 46.1, unit: 'index', impact: 'high' },
+  { economy: 'NZ', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 49.8, forecast: 50.0, previous: 49.5, unit: 'index', impact: 'high' },
+  { economy: 'NZ', key: 'cpi', name: 'CPI (QoQ)', category: 'inflation', actual: 0.3, forecast: 0.4, previous: 0.5, unit: '%', impact: 'high' },
+  { economy: 'NZ', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 5.1, forecast: 4.9, previous: 4.8, unit: '%', impact: 'medium' },
+  { economy: 'NZ', key: 'interest_rate', name: 'RBNZ OCR', category: 'rates', actual: 2.25, forecast: 2.25, previous: 2.75, unit: '%', impact: 'high' },
 
-  // CA — Updated Feb 2025 (BoC cut to 3.00%, tariff uncertainty)
-  { economy: 'CA', key: 'gdp', name: 'GDP (MoM)', category: 'growth', actual: 0.2, forecast: 0.1, previous: 0.3, unit: '%', impact: 'high' },
-  { economy: 'CA', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 1.8, forecast: 1.9, previous: 1.8, unit: '%', impact: 'high' },
-  { economy: 'CA', key: 'interest_rate', name: 'BoC Rate', category: 'rates', actual: 3.00, forecast: 3.00, previous: 3.25, unit: '%', impact: 'high' },
+  // ── CA — BoC held at 2.25% (Jan 28, 2026; -225bps from peak)
+  // Weak growth, below-target inflation, tariff uncertainty
+  { economy: 'CA', key: 'gdp', name: 'GDP (MoM)', category: 'growth', actual: 0.1, forecast: 0.2, previous: 0.2, unit: '%', impact: 'high' },
+  { economy: 'CA', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 49.0, forecast: 49.5, previous: 49.2, unit: 'index', impact: 'high' },
+  { economy: 'CA', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 50.2, forecast: 50.5, previous: 50.0, unit: 'index', impact: 'high' },
+  { economy: 'CA', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 1.7, forecast: 1.9, previous: 1.8, unit: '%', impact: 'high' },
+  { economy: 'CA', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 6.6, forecast: 6.5, previous: 6.7, unit: '%', impact: 'medium' },
+  { economy: 'CA', key: 'interest_rate', name: 'BoC Rate', category: 'rates', actual: 2.25, forecast: 2.25, previous: 2.50, unit: '%', impact: 'high' },
 
-  // CH — Updated Feb 2025 (SNB cut to 0.50%, deflation risk)
-  { economy: 'CH', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.2, forecast: 0.2, previous: 0.3, unit: '%', impact: 'high' },
-  { economy: 'CH', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 0.4, forecast: 0.5, previous: 0.6, unit: '%', impact: 'high' },
-  { economy: 'CH', key: 'interest_rate', name: 'SNB Policy Rate', category: 'rates', actual: 0.50, forecast: 0.50, previous: 1.00, unit: '%', impact: 'high' },
+  // ── CH — SNB at 0% (cut to 0% Jun 2025; expected stable all 2026)
+  // Near-deflation, franc strength, ultra-low growth environment
+  { economy: 'CH', key: 'gdp', name: 'GDP (QoQ)', category: 'growth', actual: 0.2, forecast: 0.3, previous: 0.3, unit: '%', impact: 'high' },
+  { economy: 'CH', key: 'pmi_manufacturing', name: 'Manufacturing PMI', category: 'growth', actual: 48.5, forecast: 49.0, previous: 48.0, unit: 'index', impact: 'high' },
+  { economy: 'CH', key: 'pmi_services', name: 'Services PMI', category: 'growth', actual: 51.0, forecast: 51.5, previous: 51.2, unit: 'index', impact: 'high' },
+  { economy: 'CH', key: 'cpi', name: 'CPI (YoY)', category: 'inflation', actual: 0.2, forecast: 0.4, previous: 0.6, unit: '%', impact: 'high' },
+  { economy: 'CH', key: 'unemployment_rate', name: 'Unemployment Rate', category: 'jobs', actual: 2.8, forecast: 2.7, previous: 2.6, unit: '%', impact: 'medium' },
+  { economy: 'CH', key: 'interest_rate', name: 'SNB Policy Rate', category: 'rates', actual: 0.00, forecast: 0.00, previous: 0.25, unit: '%', impact: 'high' },
 ];
 
 export class MockMacroProvider implements IMacroProvider {
@@ -490,16 +523,16 @@ export class MockMacroProvider implements IMacroProvider {
 
 // ─── MOCK RATE PROVIDER ─────────────────────────────────────────────────────
 
-// Updated February 2025 — reflects actual central bank rates and yield curves
+// Updated February 2026 — consistent with NON_US_RATES_2025 in liveProviders.ts
 const MOCK_RATES: Record<string, { policy: number; y2: number; y10: number; y30: number }> = {
-  'US': { policy: 4.33, y2: 4.20, y10: 4.50, y30: 4.75 },  // Fed paused (4.25-4.50%)
-  'EU': { policy: 2.90, y2: 2.40, y10: 2.70, y30: 2.85 },  // ECB: -100bps in 2024/25
-  'UK': { policy: 4.50, y2: 4.15, y10: 4.60, y30: 5.25 },  // BoE cut Feb 2025
-  'JP': { policy: 0.50, y2: 0.68, y10: 1.50, y30: 2.55 },  // BoJ hike Jan 2025
-  'AU': { policy: 4.10, y2: 3.85, y10: 4.40, y30: 4.70 },  // RBA cut Feb 2025
-  'NZ': { policy: 3.75, y2: 3.50, y10: 4.35, y30: 4.60 },  // RBNZ easing cycle
-  'CA': { policy: 3.00, y2: 2.85, y10: 3.30, y30: 3.55 },  // BoC: -200bps from peak
-  'CH': { policy: 0.50, y2: 0.40, y10: 0.65, y30: 0.85 },  // SNB cut Dec 2024
+  'US': { policy: 3.63, y2: 4.00, y10: 4.50, y30: 4.75 },  // Fed: 3.50-3.75% range (Feb 2026)
+  'EU': { policy: 2.15, y2: 2.09, y10: 2.70, y30: 2.90 },  // ECB held MRO 2.15% (8 total cuts from 4%)
+  'UK': { policy: 3.75, y2: 3.57, y10: 4.32, y30: 5.00 },  // BoE held 3.75% (5-4 vote Feb 2026)
+  'JP': { policy: 0.75, y2: 1.22, y10: 2.10, y30: 2.90 },  // BoJ held 0.75% (Jan 2026)
+  'AU': { policy: 3.85, y2: 3.70, y10: 4.45, y30: 4.80 },  // RBA hiked to 3.85% (Feb 2026)
+  'NZ': { policy: 2.25, y2: 2.15, y10: 3.75, y30: 4.20 },  // RBNZ held 2.25% (deep cuts from 5.50%)
+  'CA': { policy: 2.25, y2: 2.50, y10: 3.20, y30: 3.50 },  // BoC held 2.25% (-225bps from peak)
+  'CH': { policy: 0.00, y2: 0.25, y10: 0.65, y30: 0.90 },  // SNB at 0% since Jun 2025
 };
 
 export class MockRateProvider implements IRateProvider {

@@ -24,6 +24,11 @@ export interface User {
     defaultPage: string;
     compactMode: boolean;
     dataSource: 'live' | 'mock';
+    notifications: {
+      weeklyCot: boolean;
+      biasChanges: boolean;
+      macroEvents: boolean;
+    };
   };
 }
 
@@ -31,9 +36,12 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  isPasswordRecovery: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   loginWithProvider: (provider: 'google' | 'discord') => Promise<{ success: boolean; error?: string }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+  clearPasswordRecovery: () => void;
   logout: () => void;
   updateUser: (updates: Partial<User>) => void;
   toggleFavorite: (asset: string) => void;
@@ -44,8 +52,9 @@ const noopAsync = async () => ({ success: false as const, error: 'No AuthProvide
 const noop = () => {};
 
 const defaultContext: AuthContextType = {
-  user: null, isLoading: true,
+  user: null, isLoading: true, isPasswordRecovery: false,
   login: noopAsync, register: noopAsync, loginWithProvider: noopAsync,
+  forgotPassword: noopAsync, clearPasswordRecovery: noop,
   logout: noop, updateUser: noop, toggleFavorite: noop, isFavorite: () => false,
 };
 
@@ -81,7 +90,16 @@ function buildUser(sbUser: { id: string; email?: string; user_metadata?: Record<
     plan: prefs.plan || 'pro',
     createdAt: sbUser.created_at,
     favorites: prefs.favorites || ['XAU/USD', 'SPX500', 'EUR/USD'],
-    settings: prefs.settings || { defaultPage: 'overview', compactMode: false, dataSource: 'live' },
+    settings: {
+      defaultPage: prefs.settings?.defaultPage ?? 'overview',
+      compactMode: prefs.settings?.compactMode ?? false,
+      dataSource: prefs.settings?.dataSource ?? 'live',
+      notifications: {
+        weeklyCot: prefs.settings?.notifications?.weeklyCot ?? true,
+        biasChanges: prefs.settings?.notifications?.biasChanges ?? true,
+        macroEvents: prefs.settings?.notifications?.macroEvents ?? false,
+      },
+    },
   };
 }
 
@@ -89,6 +107,7 @@ function buildUser(sbUser: { id: string; email?: string; user_metadata?: Record<
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   // Initialize: restore session from Supabase
   useEffect(() => {
@@ -103,14 +122,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
-    // Listen for auth state changes (OAuth callbacks, token refresh, etc.)
+    // Listen for auth state changes (OAuth callbacks, token refresh, password recovery, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
+
+      // Password recovery: user clicked reset link in email
+      if (_event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+        if (session?.user) {
+          const prefs = loadPrefs(session.user.id);
+          setUser(buildUser(session.user, prefs));
+        }
+        setIsLoading(false);
+        return;
+      }
+
       if (session?.user) {
         const prefs = loadPrefs(session.user.id);
         setUser(buildUser(session.user, prefs));
       } else {
         setUser(null);
+        setIsPasswordRecovery(false);
       }
       setIsLoading(false);
     });
@@ -156,16 +188,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithProvider = useCallback(async (provider: 'google' | 'discord') => {
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: provider as 'google',
+      provider,
       options: { redirectTo: window.location.origin },
     });
     if (error) return { success: false, error: error.message };
     return { success: true }; // Redirect will happen
   }, []);
 
+  const forgotPassword = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  }, []);
+
+  const clearPasswordRecovery = useCallback(() => {
+    setIsPasswordRecovery(false);
+  }, []);
+
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setIsPasswordRecovery(false);
   }, []);
 
   const updateUser = useCallback((updates: Partial<User>) => {
@@ -187,7 +232,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.favorites]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, loginWithProvider, logout, updateUser, toggleFavorite, isFavorite }}>
+    <AuthContext.Provider value={{
+      user, isLoading, isPasswordRecovery,
+      login, register, loginWithProvider, forgotPassword, clearPasswordRecovery,
+      logout, updateUser, toggleFavorite, isFavorite,
+    }}>
       {children}
     </AuthContext.Provider>
   );

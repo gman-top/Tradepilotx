@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
-import { useAuth } from '../AuthContext';
+import { Eye, EyeOff, ArrowRight, Loader2, ArrowLeft, Check } from 'lucide-react';
+import { useAuth, supabase } from '../AuthContext';
 
 /* ── Inline SVG brand icons ── */
 function GoogleIcon({ size = 18 }: { size?: number }) {
@@ -22,31 +22,72 @@ function DiscordIcon({ size = 18 }: { size?: number }) {
   );
 }
 
+type AuthMode = 'login' | 'register' | 'forgot';
+
 export default function AuthPage() {
-  const { login, register, loginWithProvider } = useAuth();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const { login, register, loginWithProvider, forgotPassword, isPasswordRecovery, clearPasswordRecovery } = useAuth();
+  const [mode, setMode] = useState<AuthMode>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'discord' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInfo('');
     setLoading(true);
 
     try {
+      if (mode === 'forgot') {
+        if (!email.trim()) { setError('Email is required'); setLoading(false); return; }
+        const result = await forgotPassword(email);
+        if (!result.success) {
+          setError(result.error || 'Failed to send reset email');
+        } else {
+          setInfo('Check your email for a password reset link.');
+        }
+        return;
+      }
+
       if (mode === 'login') {
         const result = await login(email, password);
         if (!result.success) setError(result.error || 'Login failed');
       } else {
-        if (!name.trim()) { setError('Name is required'); setLoading(false); return; }
-        if (password.length < 6) { setError('Password must be at least 6 characters'); setLoading(false); return; }
+        if (!name.trim()) { setError('Name is required'); return; }
+        if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
         const result = await register(name, email, password);
-        if (!result.success) setError(result.error || 'Registration failed');
+        if (!result.success) {
+          setError(result.error || 'Registration failed');
+        } else if (result.error) {
+          // Success but email confirmation needed
+          setInfo(result.error);
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { setError('Passwords do not match'); return; }
+    setLoading(true);
+    try {
+      const { error: sbError } = await supabase.auth.updateUser({ password: newPassword });
+      if (sbError) {
+        setError(sbError.message);
+      } else {
+        clearPasswordRecovery();
       }
     } finally {
       setLoading(false);
@@ -55,6 +96,7 @@ export default function AuthPage() {
 
   const handleOAuth = async (provider: 'google' | 'discord') => {
     setError('');
+    setInfo('');
     setOauthLoading(provider);
     try {
       const result = await loginWithProvider(provider);
@@ -64,8 +106,92 @@ export default function AuthPage() {
     }
   };
 
+  const switchMode = (m: AuthMode) => { setMode(m); setError(''); setInfo(''); };
+
   const isAnyLoading = loading || oauthLoading !== null;
 
+  /* ─── Password Recovery Screen ──────────────────────────────────────── */
+  if (isPasswordRecovery) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--tp-l0)' }}>
+        <div className="w-full px-6 py-12" style={{ maxWidth: 380 }}>
+          <div className="flex items-center gap-2.5 mb-10 justify-center">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--tp-accent)' }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>T</span>
+            </div>
+            <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em' }}>TradePilot</span>
+          </div>
+
+          <div className="mb-8">
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em', marginBottom: 6 }}>
+              Set new password
+            </h2>
+            <p style={{ fontSize: 13, color: 'var(--tp-text-3)' }}>Choose a strong password for your account</p>
+          </div>
+
+          <form onSubmit={handleSetNewPassword} className="space-y-4">
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>
+                New password
+              </label>
+              <div className="relative">
+                <input
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Min. 6 characters"
+                  required
+                  disabled={loading}
+                  className="w-full rounded-lg px-3.5 py-2.5 pr-10 focus:outline-none"
+                  style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+                />
+                <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--tp-text-3)' }}>
+                  {showNewPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>
+                Confirm password
+              </label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Repeat new password"
+                required
+                disabled={loading}
+                className="w-full rounded-lg px-3.5 py-2.5 focus:outline-none"
+                style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+              />
+            </div>
+
+            {error && (
+              <div className="rounded-lg px-3.5 py-2.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                <span style={{ fontSize: 12, color: 'var(--tp-bearish)' }}>{error}</span>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5"
+              style={{ background: loading ? 'var(--tp-l3)' : 'var(--tp-accent)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: loading ? 0.7 : 1, marginTop: 8 }}
+            >
+              {loading ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> : <><span>Update password</span><ArrowRight style={{ width: 14, height: 14 }} /></>}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── Main Auth Screen ───────────────────────────────────────────────── */
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--tp-l0)' }}>
       {/* Left brand panel */}
@@ -75,15 +201,10 @@ export default function AuthPage() {
       >
         <div>
           <div className="flex items-center gap-2.5 mb-16">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--tp-accent)' }}
-            >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--tp-accent)' }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>T</span>
             </div>
-            <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em' }}>
-              TradePilot
-            </span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em' }}>TradePilot</span>
           </div>
 
           <h1 style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.3, letterSpacing: '-0.03em', color: 'var(--tp-text-1)', marginBottom: 16 }}>
@@ -101,10 +222,7 @@ export default function AuthPage() {
             { label: 'Top Setups', desc: '20 instruments scored in real-time' },
           ].map((f, i) => (
             <div key={i} className="flex items-start gap-3">
-              <div
-                className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0"
-                style={{ background: 'var(--tp-accent)' }}
-              />
+              <div className="w-1.5 h-1.5 rounded-full mt-2 flex-shrink-0" style={{ background: 'var(--tp-accent)' }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--tp-text-1)' }}>{f.label}</div>
                 <div style={{ fontSize: 12, color: 'var(--tp-text-3)' }}>{f.desc}</div>
@@ -119,231 +237,236 @@ export default function AuthPage() {
         <div className="w-full" style={{ maxWidth: 380 }}>
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-2.5 mb-10 justify-center">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: 'var(--tp-accent)' }}
-            >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--tp-accent)' }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>T</span>
             </div>
-            <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em' }}>
-              TradePilot
-            </span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em' }}>TradePilot</span>
           </div>
 
-          <div className="mb-8">
-            <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em', marginBottom: 6 }}>
-              {mode === 'login' ? 'Welcome back' : 'Create your account'}
-            </h2>
-            <p style={{ fontSize: 13, color: 'var(--tp-text-3)' }}>
-              {mode === 'login' ? 'Sign in to access your dashboard' : 'Start your free trial today'}
-            </p>
-          </div>
-
-          {/* ── OAuth Buttons ── */}
-          <div className="flex gap-3 mb-6">
-            <button
-              type="button"
-              disabled={isAnyLoading}
-              onClick={() => handleOAuth('google')}
-              className="flex-1 flex items-center justify-center gap-2.5 rounded-lg py-2.5 px-4 transition-all"
-              style={{
-                background: 'var(--tp-l2)',
-                border: '1px solid var(--tp-border)',
-                opacity: isAnyLoading && oauthLoading !== 'google' ? 0.5 : 1,
-                cursor: isAnyLoading ? 'not-allowed' : 'pointer',
-              }}
-              onMouseEnter={e => { if (!isAnyLoading) e.currentTarget.style.borderColor = 'var(--tp-border-strong)'; e.currentTarget.style.background = 'var(--tp-l3)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; e.currentTarget.style.background = 'var(--tp-l2)'; }}
-            >
-              {oauthLoading === 'google' ? (
-                <Loader2 style={{ width: 16, height: 16, color: 'var(--tp-text-2)' }} className="animate-spin" />
-              ) : (
-                <GoogleIcon size={16} />
-              )}
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-1)' }}>Google</span>
-            </button>
-
-            <button
-              type="button"
-              disabled={isAnyLoading}
-              onClick={() => handleOAuth('discord')}
-              className="flex-1 flex items-center justify-center gap-2.5 rounded-lg py-2.5 px-4 transition-all"
-              style={{
-                background: 'var(--tp-l2)',
-                border: '1px solid var(--tp-border)',
-                opacity: isAnyLoading && oauthLoading !== 'discord' ? 0.5 : 1,
-                cursor: isAnyLoading ? 'not-allowed' : 'pointer',
-              }}
-              onMouseEnter={e => { if (!isAnyLoading) e.currentTarget.style.borderColor = 'var(--tp-border-strong)'; e.currentTarget.style.background = 'var(--tp-l3)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; e.currentTarget.style.background = 'var(--tp-l2)'; }}
-            >
-              {oauthLoading === 'discord' ? (
-                <Loader2 style={{ width: 16, height: 16, color: 'var(--tp-text-2)' }} className="animate-spin" />
-              ) : (
-                <span style={{ color: '#5865F2' }}><DiscordIcon size={16} /></span>
-              )}
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-1)' }}>Discord</span>
-            </button>
-          </div>
-
-          {/* ── Divider ── */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="flex-1 h-px" style={{ background: 'var(--tp-border-subtle)' }} />
-            <span style={{ fontSize: 11, color: 'var(--tp-text-3)', whiteSpace: 'nowrap' }}>or continue with email</span>
-            <div className="flex-1 h-px" style={{ background: 'var(--tp-border-subtle)' }} />
-          </div>
-
-          {/* ── Email / Password Form ── */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
-              <div>
-                <label
-                  htmlFor="name"
-                  style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}
+          {/* ── Forgot password mode ── */}
+          {mode === 'forgot' ? (
+            <>
+              <div className="mb-8">
+                <button
+                  onClick={() => switchMode('login')}
+                  className="flex items-center gap-1.5 mb-4"
+                  style={{ fontSize: 12, color: 'var(--tp-text-3)' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = 'var(--tp-text-2)'; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = 'var(--tp-text-3)'; }}
                 >
-                  Full name
-                </label>
-                <input
-                  id="name"
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="John Doe"
-                  disabled={isAnyLoading}
-                  className="w-full rounded-lg px-3.5 py-2.5 transition-colors focus:outline-none"
-                  style={{
-                    background: 'var(--tp-l2)',
-                    border: '1px solid var(--tp-border)',
-                    color: 'var(--tp-text-1)',
-                    fontSize: 13,
-                  }}
-                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
-                />
+                  <ArrowLeft style={{ width: 13, height: 13 }} />
+                  Back to sign in
+                </button>
+                <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em', marginBottom: 6 }}>
+                  Reset password
+                </h2>
+                <p style={{ fontSize: 13, color: 'var(--tp-text-3)' }}>
+                  Enter your email and we'll send you a reset link
+                </p>
               </div>
-            )}
 
-            <div>
-              <label
-                htmlFor="email"
-                style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                disabled={isAnyLoading}
-                className="w-full rounded-lg px-3.5 py-2.5 transition-colors focus:outline-none"
-                style={{
-                  background: 'var(--tp-l2)',
-                  border: '1px solid var(--tp-border)',
-                  color: 'var(--tp-text-1)',
-                  fontSize: 13,
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
-                onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
-              />
-            </div>
+              {info ? (
+                <div className="rounded-lg px-4 py-4 flex items-start gap-3" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.25)' }}>
+                  <Check style={{ width: 16, height: 16, color: 'var(--tp-bullish)', flexShrink: 0, marginTop: 1 }} />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--tp-bullish)', marginBottom: 2 }}>Email sent</div>
+                    <div style={{ fontSize: 12, color: 'var(--tp-text-2)' }}>{info}</div>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>Email</label>
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      required
+                      disabled={loading}
+                      className="w-full rounded-lg px-3.5 py-2.5 focus:outline-none"
+                      style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                      onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                      onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+                    />
+                  </div>
 
-            <div>
-              <label
-                htmlFor="password"
-                style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}
-              >
-                Password
-              </label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder={mode === 'register' ? 'Min. 6 characters' : 'Enter password'}
-                  required
-                  disabled={isAnyLoading}
-                  className="w-full rounded-lg px-3.5 py-2.5 pr-10 transition-colors focus:outline-none"
-                  style={{
-                    background: 'var(--tp-l2)',
-                    border: '1px solid var(--tp-border)',
-                    color: 'var(--tp-text-1)',
-                    fontSize: 13,
-                  }}
-                  onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
-                  onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
-                />
+                  {error && (
+                    <div className="rounded-lg px-3.5 py-2.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                      <span style={{ fontSize: 12, color: 'var(--tp-bearish)' }}>{error}</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5"
+                    style={{ background: loading ? 'var(--tp-l3)' : 'var(--tp-accent)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: loading ? 0.7 : 1, marginTop: 8 }}
+                  >
+                    {loading ? <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> : <><span>Send reset link</span><ArrowRight style={{ width: 14, height: 14 }} /></>}
+                  </button>
+                </form>
+              )}
+            </>
+          ) : (
+            <>
+              {/* ── Login / Register mode ── */}
+              <div className="mb-8">
+                <h2 style={{ fontSize: 22, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.03em', marginBottom: 6 }}>
+                  {mode === 'login' ? 'Welcome back' : 'Create your account'}
+                </h2>
+                <p style={{ fontSize: 13, color: 'var(--tp-text-3)' }}>
+                  {mode === 'login' ? 'Sign in to access your dashboard' : 'Start your free trial today'}
+                </p>
+              </div>
+
+              {/* ── OAuth Buttons ── */}
+              <div className="flex gap-3 mb-6">
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: 'var(--tp-text-3)' }}
+                  disabled={isAnyLoading}
+                  onClick={() => handleOAuth('google')}
+                  className="flex-1 flex items-center justify-center gap-2.5 rounded-lg py-2.5 px-4 transition-all"
+                  style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', opacity: isAnyLoading && oauthLoading !== 'google' ? 0.5 : 1, cursor: isAnyLoading ? 'not-allowed' : 'pointer' }}
+                  onMouseEnter={e => { if (!isAnyLoading) { e.currentTarget.style.borderColor = 'var(--tp-border-strong)'; e.currentTarget.style.background = 'var(--tp-l3)'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; e.currentTarget.style.background = 'var(--tp-l2)'; }}
                 >
-                  {showPassword
-                    ? <EyeOff style={{ width: 16, height: 16 }} />
-                    : <Eye style={{ width: 16, height: 16 }} />
-                  }
+                  {oauthLoading === 'google' ? <Loader2 style={{ width: 16, height: 16, color: 'var(--tp-text-2)' }} className="animate-spin" /> : <GoogleIcon size={16} />}
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-1)' }}>Google</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isAnyLoading}
+                  onClick={() => handleOAuth('discord')}
+                  className="flex-1 flex items-center justify-center gap-2.5 rounded-lg py-2.5 px-4 transition-all"
+                  style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', opacity: isAnyLoading && oauthLoading !== 'discord' ? 0.5 : 1, cursor: isAnyLoading ? 'not-allowed' : 'pointer' }}
+                  onMouseEnter={e => { if (!isAnyLoading) { e.currentTarget.style.borderColor = 'var(--tp-border-strong)'; e.currentTarget.style.background = 'var(--tp-l3)'; } }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; e.currentTarget.style.background = 'var(--tp-l2)'; }}
+                >
+                  {oauthLoading === 'discord' ? <Loader2 style={{ width: 16, height: 16, color: 'var(--tp-text-2)' }} className="animate-spin" /> : <span style={{ color: '#5865F2' }}><DiscordIcon size={16} /></span>}
+                  <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-1)' }}>Discord</span>
                 </button>
               </div>
-            </div>
 
-            {error && (
-              <div
-                className="rounded-lg px-3.5 py-2.5"
-                style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}
-              >
-                <span style={{ fontSize: 12, color: 'var(--tp-bearish)' }}>{error}</span>
+              {/* ── Divider ── */}
+              <div className="flex items-center gap-3 mb-6">
+                <div className="flex-1 h-px" style={{ background: 'var(--tp-border-subtle)' }} />
+                <span style={{ fontSize: 11, color: 'var(--tp-text-3)', whiteSpace: 'nowrap' }}>or continue with email</span>
+                <div className="flex-1 h-px" style={{ background: 'var(--tp-border-subtle)' }} />
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={isAnyLoading}
-              className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 transition-all"
-              style={{
-                background: isAnyLoading ? 'var(--tp-l3)' : 'var(--tp-accent)',
-                color: '#fff',
-                fontSize: 13,
-                fontWeight: 600,
-                opacity: isAnyLoading ? 0.7 : 1,
-                marginTop: 8,
-              }}
-            >
-              {loading ? (
-                <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" />
-              ) : (
-                <>
-                  {mode === 'login' ? 'Sign in' : 'Create account'}
-                  <ArrowRight style={{ width: 14, height: 14 }} />
-                </>
-              )}
-            </button>
-          </form>
+              {/* ── Email / Password Form ── */}
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {mode === 'register' && (
+                  <div>
+                    <label htmlFor="name" style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>Full name</label>
+                    <input
+                      id="name"
+                      type="text"
+                      value={name}
+                      onChange={e => setName(e.target.value)}
+                      placeholder="John Doe"
+                      disabled={isAnyLoading}
+                      className="w-full rounded-lg px-3.5 py-2.5 focus:outline-none"
+                      style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                      onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                      onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+                    />
+                  </div>
+                )}
 
-          <div className="mt-6 text-center">
-            <span style={{ fontSize: 12, color: 'var(--tp-text-3)' }}>
-              {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-            </span>
-            <button
-              onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-              style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-accent)' }}
-            >
-              {mode === 'login' ? 'Create one' : 'Sign in'}
-            </button>
-          </div>
+                <div>
+                  <label htmlFor="email" style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>Email</label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    required
+                    disabled={isAnyLoading}
+                    className="w-full rounded-lg px-3.5 py-2.5 focus:outline-none"
+                    style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                    onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                    onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+                  />
+                </div>
 
-          {/* Demo hint */}
-          <div
-            className="mt-8 rounded-lg px-4 py-3 text-center"
-            style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border-subtle)' }}
-          >
-            <p style={{ fontSize: 11, color: 'var(--tp-text-3)', lineHeight: 1.6 }}>
-              Use Google or Discord for instant access, or create an account with any email. Data is stored locally in your browser.
-            </p>
-          </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label htmlFor="password" style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)' }}>Password</label>
+                    {mode === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => switchMode('forgot')}
+                        style={{ fontSize: 11, color: 'var(--tp-accent)' }}
+                        onMouseEnter={e => { e.currentTarget.style.opacity = '0.75'; }}
+                        onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder={mode === 'register' ? 'Min. 6 characters' : 'Enter password'}
+                      required
+                      disabled={isAnyLoading}
+                      className="w-full rounded-lg px-3.5 py-2.5 pr-10 focus:outline-none"
+                      style={{ background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                      onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                      onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+                    />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--tp-text-3)' }}>
+                      {showPassword ? <EyeOff style={{ width: 16, height: 16 }} /> : <Eye style={{ width: 16, height: 16 }} />}
+                    </button>
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="rounded-lg px-3.5 py-2.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--tp-bearish)' }}>{error}</span>
+                  </div>
+                )}
+
+                {info && (
+                  <div className="rounded-lg px-3.5 py-2.5" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--tp-bullish)' }}>{info}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isAnyLoading}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 transition-all"
+                  style={{ background: isAnyLoading ? 'var(--tp-l3)' : 'var(--tp-accent)', color: '#fff', fontSize: 13, fontWeight: 600, opacity: isAnyLoading ? 0.7 : 1, marginTop: 8 }}
+                >
+                  {loading ? (
+                    <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" />
+                  ) : (
+                    <>{mode === 'login' ? 'Sign in' : 'Create account'}<ArrowRight style={{ width: 14, height: 14 }} /></>
+                  )}
+                </button>
+              </form>
+
+              <div className="mt-6 text-center">
+                <span style={{ fontSize: 12, color: 'var(--tp-text-3)' }}>
+                  {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                </span>
+                <button
+                  onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
+                  style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-accent)' }}
+                >
+                  {mode === 'login' ? 'Create one' : 'Sign in'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

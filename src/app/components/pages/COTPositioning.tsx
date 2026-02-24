@@ -23,8 +23,21 @@ import {
 // ─── DATA SOURCE STATE ─────────────────────────────────────────────────────
 type DataSource = 'live' | 'partial' | 'mock' | 'loading' | 'error';
 
-const LATEST_COT_RELEASE_DATE = 'Feb 3, 2026';
-const LATEST_COT_UPDATE_TIMESTAMP = 'Feb 3, 2026, 3:30 PM';
+// CFTC releases COT reports every Friday at 3:30 PM ET for the preceding Tuesday
+function getLatestCFTCRelease(): { releaseDate: string; releaseTimestamp: string } {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
+  // Days back to most recent Friday
+  const daysBack = day === 5 ? 0 : day === 6 ? 1 : day + 2;
+  const lastFriday = new Date(now);
+  lastFriday.setDate(now.getDate() - daysBack);
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+  const releaseDate = lastFriday.toLocaleDateString('en-US', opts);
+  const releaseTimestamp = releaseDate + ', 3:30 PM';
+  return { releaseDate, releaseTimestamp };
+}
+
+const { releaseDate: LATEST_COT_RELEASE_DATE, releaseTimestamp: LATEST_COT_UPDATE_TIMESTAMP } = getLatestCFTCRelease();
 
 type TraderType = 'Non-Commercials' | 'Commercials' | 'Retail' | 'All';
 

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { User, Shield, Star, Bell, Monitor, LogOut, Check, X, Wifi, WifiOff, Loader2, Database } from 'lucide-react';
-import { useAuth } from '../AuthContext';
+import React, { useState } from 'react';
+import { User, Shield, Star, Bell, Monitor, LogOut, Check, X, Wifi, Loader2, Database, Eye, EyeOff } from 'lucide-react';
+import { useAuth, supabase } from '../AuthContext';
 import { PROVIDERS_ENABLED } from '../../engine/config';
 import { useTradePilotData } from '../../engine/dataService';
 
@@ -16,6 +16,7 @@ export default function AccountPage() {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(user?.name || '');
   const [saved, setSaved] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   if (!user) return null;
 
@@ -49,6 +50,8 @@ export default function AccountPage() {
     enterprise: { label: 'Enterprise', color: C.bullish, bg: 'rgba(52,211,153,0.1)' },
   }[user.plan];
 
+  const notif = user.settings.notifications;
+
   return (
     <div className="p-5 md:p-8 lg:p-10">
       {/* Saved toast */}
@@ -60,6 +63,14 @@ export default function AccountPage() {
           <Check style={{ width: 14, height: 14, color: C.bullish }} />
           <span style={{ fontSize: 12, fontWeight: 500, color: C.bullish }}>Settings saved</span>
         </div>
+      )}
+
+      {/* Change password modal */}
+      {showPasswordModal && (
+        <ChangePasswordModal
+          onClose={() => setShowPasswordModal(false)}
+          onSuccess={() => { setShowPasswordModal(false); showSaved(); }}
+        />
       )}
 
       {/* Header */}
@@ -76,12 +87,21 @@ export default function AccountPage() {
           <div className="rounded-xl p-6" style={{ background: C.l2, border: `1px solid ${C.borderSubtle}` }}>
             {/* Avatar */}
             <div className="flex flex-col items-center mb-6">
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
-                style={{ background: 'var(--tp-accent-muted)', border: '2px solid var(--tp-accent)' }}
-              >
-                <span style={{ fontSize: 24, fontWeight: 700, color: C.accent }}>{initials}</span>
-              </div>
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  className="w-20 h-20 rounded-full mb-4 object-cover"
+                  style={{ border: '2px solid var(--tp-accent)' }}
+                />
+              ) : (
+                <div
+                  className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
+                  style={{ background: 'var(--tp-accent-muted)', border: '2px solid var(--tp-accent)' }}
+                >
+                  <span style={{ fontSize: 24, fontWeight: 700, color: C.accent }}>{initials}</span>
+                </div>
+              )}
               {editingName ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -209,20 +229,29 @@ export default function AccountPage() {
               <ToggleRow
                 label="Weekly COT alerts"
                 description="Get notified when new COT data is released"
-                checked={true}
-                onChange={() => showSaved()}
+                checked={notif.weeklyCot}
+                onChange={v => {
+                  updateUser({ settings: { ...user.settings, notifications: { ...notif, weeklyCot: v } } });
+                  showSaved();
+                }}
               />
               <ToggleRow
                 label="Bias changes"
                 description="Alert when TradePilot bias changes for favorites"
-                checked={true}
-                onChange={() => showSaved()}
+                checked={notif.biasChanges}
+                onChange={v => {
+                  updateUser({ settings: { ...user.settings, notifications: { ...notif, biasChanges: v } } });
+                  showSaved();
+                }}
               />
               <ToggleRow
                 label="Macro events"
                 description="High-impact economic releases"
-                checked={false}
-                onChange={() => showSaved()}
+                checked={notif.macroEvents}
+                onChange={v => {
+                  updateUser({ settings: { ...user.settings, notifications: { ...notif, macroEvents: v } } });
+                  showSaved();
+                }}
               />
             </div>
           </SettingsSection>
@@ -232,9 +261,10 @@ export default function AccountPage() {
             <div className="flex items-center justify-between">
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: C.t1 }}>Password</div>
-                <div style={{ fontSize: 11, color: C.t3 }}>Last changed: Never</div>
+                <div style={{ fontSize: 11, color: C.t3 }}>Update your account password</div>
               </div>
               <button
+                onClick={() => setShowPasswordModal(true)}
                 className="rounded-lg px-3.5 py-1.5 transition-colors"
                 style={{ fontSize: 12, fontWeight: 500, color: C.accent, background: 'var(--tp-accent-muted)', border: '1px solid transparent' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
@@ -245,6 +275,141 @@ export default function AccountPage() {
             </div>
           </SettingsSection>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Change Password Modal ─────────────────────────────────────────────────── */
+function ChangePasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { setError('Passwords do not match'); return; }
+
+    setLoading(true);
+    try {
+      const { error: sbError } = await supabase.auth.updateUser({ password: newPassword });
+      if (sbError) {
+        setError(sbError.message);
+      } else {
+        onSuccess();
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="rounded-xl p-6 w-full relative"
+        style={{ maxWidth: 400, background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1 rounded-md transition-colors"
+          style={{ color: 'var(--tp-text-3)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--tp-l3)'; e.currentTarget.style.color = 'var(--tp-text-2)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--tp-text-3)'; }}
+        >
+          <X style={{ width: 16, height: 16 }} />
+        </button>
+
+        <div className="mb-6">
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.02em', marginBottom: 4 }}>
+            Change password
+          </h3>
+          <p style={{ fontSize: 12, color: 'var(--tp-text-3)' }}>
+            Choose a strong password (min. 6 characters)
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>
+              New password
+            </label>
+            <div className="relative">
+              <input
+                type={showNew ? 'text' : 'password'}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Min. 6 characters"
+                required
+                disabled={loading}
+                className="w-full rounded-lg px-3.5 py-2.5 pr-10 focus:outline-none"
+                style={{ background: 'var(--tp-l3)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+              />
+              <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--tp-text-3)' }}>
+                {showNew ? <EyeOff style={{ width: 15, height: 15 }} /> : <Eye style={{ width: 15, height: 15 }} />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>
+              Confirm password
+            </label>
+            <div className="relative">
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Repeat new password"
+                required
+                disabled={loading}
+                className="w-full rounded-lg px-3.5 py-2.5 pr-10 focus:outline-none"
+                style={{ background: 'var(--tp-l3)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+              />
+              <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--tp-text-3)' }}>
+                {showConfirm ? <EyeOff style={{ width: 15, height: 15 }} /> : <Eye style={{ width: 15, height: 15 }} />}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-lg px-3.5 py-2.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+              <span style={{ fontSize: 12, color: 'var(--tp-bearish)' }}>{error}</span>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 rounded-lg py-2.5 transition-colors"
+              style={{ fontSize: 13, fontWeight: 500, color: 'var(--tp-text-2)', background: 'var(--tp-l3)', border: '1px solid var(--tp-border)' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 transition-colors"
+              style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: loading ? 'var(--tp-l3)' : 'var(--tp-accent)', opacity: loading ? 0.7 : 1 }}
+            >
+              {loading ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" /> : 'Update password'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -319,10 +484,8 @@ function DataSourcesPanel() {
           <div className="flex items-center gap-2">
             {loading ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: C.t3 }} />
-            ) : liveCount === totalCount ? (
-              <Wifi className="w-3.5 h-3.5" style={{ color: C.bullish }} />
             ) : (
-              <Wifi className="w-3.5 h-3.5" style={{ color: C.accent }} />
+              <Wifi className="w-3.5 h-3.5" style={{ color: liveCount === totalCount ? C.bullish : C.accent }} />
             )}
             <span style={{ fontSize: 12, fontWeight: 600, color: loading ? C.t3 : C.t1 }}>
               {loading ? 'Connecting...' : `${liveCount}/${totalCount} providers live`}

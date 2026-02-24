@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowUp, ArrowDown, Star, Loader2 } from 'lucide-react';
 import { useIsMobile } from '../ui/use-mobile';
 import { useTradePilotData, type SetupRow } from '../../engine/dataService';
+import { useAuth } from '../AuthContext';
 
 const C = {
   l1: 'var(--tp-l1)', l2: 'var(--tp-l2)', l3: 'var(--tp-l3)',
@@ -18,10 +19,10 @@ const scoreColor = (s: number) => s > 0 ? C.bullish : s < 0 ? C.bearish : C.neut
 export default function TopSetups() {
   const isMobile = useIsMobile();
   const { data, loading } = useTradePilotData();
+  const { isFavorite, toggleFavorite } = useAuth();
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [favOnly, setFavOnly] = useState(false);
-  const [starred, setStarred] = useState<Record<string, boolean>>({});
 
   if (loading || !data) {
     return (
@@ -37,7 +38,7 @@ export default function TopSetups() {
   };
 
   const sorted = [...data.setups]
-    .filter(s => !favOnly || starred[s.symbol])
+    .filter(s => !favOnly || isFavorite(s.symbol))
     .sort((a, b) => {
       let c = 0;
       if (sortKey === 'score') c = a.totalScore - b.totalScore;
@@ -73,8 +74,8 @@ export default function TopSetups() {
             <div key={s.symbol} className="rounded-lg p-3.5" style={{ background: C.l2, border: `1px solid ${C.borderSubtle}` }}>
               <div className="flex items-center justify-between mb-2.5">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setStarred(p => ({ ...p, [s.symbol]: !p[s.symbol] }))}>
-                    <Star style={{ width: 14, height: 14, color: starred[s.symbol] ? C.accent : C.t3, fill: starred[s.symbol] ? C.accent : 'none' }} />
+                  <button onClick={() => toggleFavorite(s.symbol)}>
+                    <Star style={{ width: 14, height: 14, color: isFavorite(s.symbol) ? C.accent : C.t3, fill: isFavorite(s.symbol) ? C.accent : 'none' }} />
                   </button>
                   <span style={{ fontSize: 13, fontWeight: 600, color: C.t1 }}>{s.symbol}</span>
                 </div>
@@ -157,8 +158,8 @@ export default function TopSetups() {
                 >
                   <td className="py-2.5 px-3" style={{ position: 'sticky', left: 0, zIndex: 5, background: C.l2 }}>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setStarred(p => ({ ...p, [s.symbol]: !p[s.symbol] }))}>
-                        <Star style={{ width: 13, height: 13, color: starred[s.symbol] ? C.accent : C.t3, fill: starred[s.symbol] ? C.accent : 'none' }} />
+                      <button onClick={() => toggleFavorite(s.symbol)}>
+                        <Star style={{ width: 13, height: 13, color: isFavorite(s.symbol) ? C.accent : C.t3, fill: isFavorite(s.symbol) ? C.accent : 'none' }} />
                       </button>
                       <span style={{ fontSize: 13, fontWeight: 500, color: C.t1 }}>{s.symbol}</span>
                     </div>

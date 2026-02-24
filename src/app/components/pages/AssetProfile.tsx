@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, ReferenceLine, ResponsiveContainer, Cell, Tooltip
 import { COT_AVAILABLE_SYMBOLS, COT_SYMBOL_MAPPINGS } from '../../utils/cotMappings';
 import { useTradePilotData, ASSET_CATALOG, type AssetDef } from '../../engine/dataService';
 import type { AssetScorecard, SignalInput } from '../../types/scoring';
-import type { MacroRelease } from '../../types/database';
+import type { MacroRelease, TechnicalIndicator } from '../../types/database';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -365,11 +365,38 @@ function buildMetricRows(
   });
 }
 
+function smaBias(price: number, sma: number | null): BiasLevel {
+  if (sma === null || sma === 0) return 'Neutral';
+  const pct = ((price - sma) / sma) * 100;
+  if (pct > 3) return 'Very Bullish';
+  if (pct > 0) return 'Bullish';
+  if (pct < -3) return 'Very Bearish';
+  if (pct < 0) return 'Bearish';
+  return 'Neutral';
+}
+
+function deriveSMAs(
+  tech: TechnicalIndicator | null | undefined,
+  mock: SymbolData,
+): { sma20: BiasLevel; sma50: BiasLevel; sma100: BiasLevel; sma200: BiasLevel } {
+  if (!tech || tech.sma_200 === null || tech.price_vs_sma200 === null) {
+    return { sma20: mock.sma20, sma50: mock.sma50, sma100: mock.sma100, sma200: mock.sma200 };
+  }
+  const price = tech.sma_200 * (1 + tech.price_vs_sma200 / 100);
+  return {
+    sma20:  smaBias(price, tech.sma_20),
+    sma50:  smaBias(price, tech.sma_50),
+    sma100: smaBias(price, tech.sma_100),
+    sma200: smaBias(price, tech.sma_200),
+  };
+}
+
 function scorecardToSymbolData(
   card: AssetScorecard,
   mock: SymbolData,
   macroReleases: Record<string, MacroRelease[]>,
   assetDef: AssetDef,
+  technical?: TechnicalIndicator | null,
 ): SymbolData {
   const { categories, readings } = card;
 
@@ -459,13 +486,12 @@ function scorecardToSymbolData(
     inflationMetrics: inflMetrics.length > 0 ? inflMetrics : mock.inflationMetrics,
     jobsOverall,
     jobsMetrics: jobMetrics.length > 0 ? jobMetrics : mock.jobsMetrics,
-    // Fields that don't have live sources yet — keep mock
+    // Technical snapshot — derive SMA biases from live price data
     targets: mock.targets,
-    sma20: mock.sma20,
-    sma50: mock.sma50,
-    sma100: mock.sma100,
-    sma200: mock.sma200,
-    volatility: mock.volatility,
+    ...deriveSMAs(technical, mock),
+    volatility: technical?.volatility != null
+      ? (technical.volatility > 25 ? 'High' : technical.volatility > 12 ? 'Medium' : 'Low')
+      : mock.volatility,
     avgMove7d: mock.avgMove7d,
     avgMove90d: mock.avgMove90d,
     scoreHistory: mock.scoreHistory,
@@ -793,7 +819,8 @@ export default function AssetProfile() {
     const assetDef = ASSET_CATALOG.find(d => d.asset.symbol === dsSymbol);
     if (!assetDef) return mock;
 
-    return scorecardToSymbolData(card, mock, tpData.macroReleases, assetDef);
+    const technical = tpData.technicals?.[dsSymbol] ?? null;
+    return scorecardToSymbolData(card, mock, tpData.macroReleases, assetDef, technical);
   }, [selectedSymbol, tpData]);
 
   const displayName = COT_SYMBOL_MAPPINGS[selectedSymbol]?.displayName || selectedSymbol;

@@ -361,6 +361,7 @@ export interface TradePilotData {
   regime: MacroRegime;
   macroReleases: Record<string, MacroRelease[]>;
   rates: Record<string, InterestRate>;
+  technicals: Record<string, TechnicalIndicator>;
   assets: AssetDef[];
   computedAt: string;
 }
@@ -542,6 +543,7 @@ async function computeAll(): Promise<TradePilotData> {
   const scorecards: Record<string, AssetScorecard> = {};
   const allMacroReleases: Record<string, MacroRelease[]> = {};
   const allRates: Record<string, InterestRate> = {};
+  const allTechnicals: Record<string, TechnicalIndicator> = {};
 
   // Fetch macro releases per economy (for Fundamentals page)
   for (const econ of ECONOMIES) {
@@ -558,6 +560,9 @@ async function computeAll(): Promise<TradePilotData> {
     const snapshot = await buildSnapshot(def);
     const scorecard = computeAssetScorecard(snapshot);
     scorecards[def.asset.symbol] = scorecard;
+    if (snapshot.technical) {
+      allTechnicals[def.asset.symbol] = snapshot.technical;
+    }
   }
 
   // Derive page-specific data
@@ -570,6 +575,7 @@ async function computeAll(): Promise<TradePilotData> {
     regime,
     macroReleases: allMacroReleases,
     rates: allRates,
+    technicals: allTechnicals,
     assets: ASSET_CATALOG,
     computedAt: new Date().toISOString(),
   };

@@ -840,9 +840,12 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
     }
 
     try {
-      // Myfxbook community outlook — public JSON endpoint
+      // Myfxbook community outlook — use Vite proxy in dev to bypass CORS
+      const myfxbookUrl = import.meta.env.DEV
+        ? '/api/myfxbook/get-community-outlook.json'
+        : 'https://www.myfxbook.com/api/get-community-outlook.json';
       const res = await fetch(
-        'https://www.myfxbook.com/api/get-community-outlook.json',
+        myfxbookUrl,
         { signal: AbortSignal.timeout(8000) }
       );
 
@@ -897,9 +900,10 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
 
   async healthCheck(): Promise<boolean> {
     try {
-      const res = await fetch('https://www.myfxbook.com/api/get-community-outlook.json', {
-        signal: AbortSignal.timeout(5000),
-      });
+      const url = import.meta.env.DEV
+        ? '/api/myfxbook/get-community-outlook.json'
+        : 'https://www.myfxbook.com/api/get-community-outlook.json';
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       return res.ok;
     } catch {
       return false;

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { User, Shield, Star, Bell, Monitor, LogOut, Check, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Shield, Star, Bell, Monitor, LogOut, Check, X, Wifi, WifiOff, Loader2, Database } from 'lucide-react';
 import { useAuth } from '../AuthContext';
+import { PROVIDERS_ENABLED } from '../../engine/config';
+import { useTradePilotData } from '../../engine/dataService';
 
 const C = {
   l1: 'var(--tp-l1)', l2: 'var(--tp-l2)', l3: 'var(--tp-l3)',
@@ -198,6 +200,9 @@ export default function AccountPage() {
             </div>
           </SettingsSection>
 
+          {/* Data Sources */}
+          <DataSourcesPanel />
+
           {/* Notifications */}
           <SettingsSection icon={Bell} title="Notifications" description="Alert preferences">
             <div className="space-y-4">
@@ -264,6 +269,100 @@ function SettingsSection({ icon: Icon, title, description, children }: {
       </div>
       {children}
     </div>
+  );
+}
+
+function DataSourcesPanel() {
+  const { data, loading } = useTradePilotData();
+
+  const sources: { name: string; status: 'live' | 'mock' | 'loading'; detail: string }[] = [
+    {
+      name: 'COT (CFTC)',
+      status: loading ? 'loading' : 'live',
+      detail: 'CFTC SODA API — no key required',
+    },
+    {
+      name: 'US Macro (FRED)',
+      status: loading ? 'loading' : PROVIDERS_ENABLED.fred ? 'live' : 'mock',
+      detail: PROVIDERS_ENABLED.fred ? 'FRED API connected' : 'Set VITE_FRED_API_KEY in .env',
+    },
+    {
+      name: 'Price & Technicals',
+      status: loading ? 'loading' : PROVIDERS_ENABLED.twelveData ? 'live' : 'mock',
+      detail: PROVIDERS_ENABLED.twelveData ? 'TwelveData API connected' : 'Set VITE_TWELVE_DATA_API_KEY in .env',
+    },
+    {
+      name: 'Retail Sentiment',
+      status: loading ? 'loading' : 'live',
+      detail: 'Myfxbook community outlook — no key required',
+    },
+    {
+      name: 'Interest Rates',
+      status: loading ? 'loading' : 'live',
+      detail: 'FRED (US) + Updated 2025 data (non-US)',
+    },
+    {
+      name: 'Scoring Engine',
+      status: loading ? 'loading' : data ? 'live' : 'mock',
+      detail: data ? `${Object.keys(data.scorecards).length} assets scored` : 'Waiting for data...',
+    },
+  ];
+
+  const liveCount = sources.filter(s => s.status === 'live').length;
+  const totalCount = sources.length;
+
+  return (
+    <SettingsSection icon={Database} title="Data Sources" description="Live provider status">
+      <div className="space-y-2.5">
+        {/* Summary bar */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {loading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: C.t3 }} />
+            ) : liveCount === totalCount ? (
+              <Wifi className="w-3.5 h-3.5" style={{ color: C.bullish }} />
+            ) : (
+              <Wifi className="w-3.5 h-3.5" style={{ color: C.accent }} />
+            )}
+            <span style={{ fontSize: 12, fontWeight: 600, color: loading ? C.t3 : C.t1 }}>
+              {loading ? 'Connecting...' : `${liveCount}/${totalCount} providers live`}
+            </span>
+          </div>
+          {data && (
+            <span style={{ fontSize: 10, color: C.t3 }}>
+              Updated: {new Date(data.computedAt).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+
+        {/* Provider rows */}
+        {sources.map(src => (
+          <div key={src.name} className="flex items-center justify-between py-1.5">
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: C.t1 }}>{src.name}</div>
+              <div style={{ fontSize: 10, color: C.t3 }}>{src.detail}</div>
+            </div>
+            <span
+              className="rounded-md px-2 py-0.5"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                color: src.status === 'live' ? C.bullish : src.status === 'loading' ? C.t3 : C.bearish,
+                background: src.status === 'live'
+                  ? 'rgba(52,211,153,0.1)'
+                  : src.status === 'loading'
+                  ? C.l3
+                  : 'rgba(248,113,113,0.1)',
+              }}
+            >
+              {src.status === 'loading' ? 'LOADING' : src.status === 'live' ? 'LIVE' : 'MOCK'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </SettingsSection>
   );
 }
 

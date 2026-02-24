@@ -1,7 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, ChevronDown } from 'lucide-react';
+import { Search, ChevronDown, Loader2, Wifi, WifiOff } from 'lucide-react';
 import { BarChart, Bar, XAxis, ReferenceLine, ResponsiveContainer, Cell, Tooltip } from 'recharts';
 import { COT_AVAILABLE_SYMBOLS, COT_SYMBOL_MAPPINGS } from '../../utils/cotMappings';
+import { useTradePilotData, ASSET_CATALOG, type AssetDef } from '../../engine/dataService';
+import type { AssetScorecard, SignalInput } from '../../types/scoring';
+import type { MacroRelease } from '../../types/database';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -289,6 +292,188 @@ function getSymbolData(sym: string): SymbolData {
   return generateData(sym, s);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIVE DATA BRIDGE — Maps scoring engine output → SymbolData
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// Reverse map: COT symbol → dataService asset symbol
+const COT_TO_DS_SYMBOL: Record<string, string> = {};
+for (const def of ASSET_CATALOG) {
+  if (def.cotSymbol) COT_TO_DS_SYMBOL[def.cotSymbol] = def.asset.symbol;
+}
+
+function directionToBias(direction: string): BiasLevel {
+  switch (direction) {
+    case 'bullish': return 'Bullish';
+    case 'bearish': return 'Bearish';
+    default: return 'Neutral';
+  }
+}
+
+function biasLabelToBias(label: string): BiasLevel {
+  switch (label) {
+    case 'very_bullish': return 'Very Bullish';
+    case 'bullish': return 'Bullish';
+    case 'very_bearish': return 'Very Bearish';
+    case 'bearish': return 'Bearish';
+    default: return 'Neutral';
+  }
+}
+
+function findReading(readings: SignalInput[], key: string): SignalInput | undefined {
+  return readings.find(r => r.metric_key === key);
+}
+
+function fmtMacroVal(val: number | null | undefined, unit: string | null | undefined): string {
+  if (val === null || val === undefined) return '-';
+  const u = unit || '';
+  if (u === '%') return `${val}%`;
+  if (u === 'index') return val.toFixed(1);
+  if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(val) >= 1_000) return `${(val / 1_000).toFixed(0)}k`;
+  return val.toString();
+}
+
+function fmtSurprise(surprise: number | null | undefined, unit: string | null | undefined): string {
+  if (surprise === null || surprise === undefined) return '-';
+  const sign = surprise > 0 ? '+' : '';
+  const u = unit || '';
+  if (u === '%') return `${sign}${surprise}%`;
+  if (u === 'index') return `${sign}${surprise.toFixed(1)}`;
+  if (Math.abs(surprise) >= 1_000_000) return `${sign}${(surprise / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(surprise) >= 1_000) return `${sign}${(surprise / 1_000).toFixed(0)}k`;
+  return `${sign}${surprise}`;
+}
+
+function buildMetricRows(
+  readings: SignalInput[],
+  macroReleases: MacroRelease[],
+  category: string,
+): MetricRow[] {
+  const filtered = macroReleases.filter(r => r.category === category);
+  return filtered.map(r => {
+    // Find matching signal to get bias
+    const signal = readings.find(s => s.metric_key === r.indicator_key);
+    const bias: BiasLevel = signal ? directionToBias(signal.direction) : 'Neutral';
+    return {
+      metric: r.indicator_name,
+      bias,
+      actual: fmtMacroVal(r.actual, r.unit),
+      forecast: fmtMacroVal(r.forecast, r.unit),
+      surprise: fmtSurprise(r.surprise, r.unit),
+    };
+  });
+}
+
+function scorecardToSymbolData(
+  card: AssetScorecard,
+  mock: SymbolData,
+  macroReleases: Record<string, MacroRelease[]>,
+  assetDef: AssetDef,
+): SymbolData {
+  const { categories, readings } = card;
+
+  // Scale total_score (-10..+10) → tpScore (-5..+5)
+  const tpScore = Math.round(card.total_score / 2);
+
+  // Scale category scores (-2..+2) → sub-scores (-5..+5)
+  const techCat = categories['technical'];
+  const cotCat = categories['cot'];
+  const sentCat = categories['sentiment'];
+  const growthCat = categories['eco_growth'];
+  const inflCat = categories['inflation'];
+  const jobsCat = categories['jobs'];
+  const ratesCat = categories['rates'];
+
+  const technicalScore = Math.round((techCat?.score ?? 0) * 2.5);
+  const cotAvg = ((cotCat?.score ?? 0) + (sentCat?.score ?? 0)) / 2;
+  const sentimentCotScore = Math.round(cotAvg * 2.5);
+  const fundAvg = ((growthCat?.score ?? 0) + (inflCat?.score ?? 0) + (jobsCat?.score ?? 0) + (ratesCat?.score ?? 0)) / 4;
+  const fundamentalsScore = Math.round(fundAvg * 2.5);
+
+  // BiasLevel from directions
+  const technicalOverall = directionToBias(techCat?.direction ?? 'neutral');
+  const cotOverall = directionToBias(cotCat?.direction ?? 'neutral');
+  const crowdSentimentBias = directionToBias(sentCat?.direction ?? 'neutral');
+  const economicOverall = directionToBias(growthCat?.direction ?? 'neutral');
+  const inflationOverall = directionToBias(inflCat?.direction ?? 'neutral');
+  const jobsOverall = directionToBias(jobsCat?.direction ?? 'neutral');
+
+  // Individual signal readings
+  const trendDaily = findReading(readings, 'trend_daily');
+  const seasonalitySignal = findReading(readings, 'seasonality');
+  const cotNetSignal = findReading(readings, 'cot_nc_net');
+  const cotPctlSignal = findReading(readings, 'cot_percentile');
+  const cotChangeSignal = findReading(readings, 'cot_nc_change');
+  const sentimentSignal = findReading(readings, 'retail_sentiment');
+
+  // COT long/short from retail sentiment raw data
+  const longPct = sentimentSignal?.raw_value ?? mock.longPct;
+  const shortPct = sentimentSignal ? (100 - (sentimentSignal.raw_value ?? 50)) : mock.shortPct;
+  const weeklyChange = cotChangeSignal?.raw_value ?? mock.weeklyChange;
+
+  // Crowd sentiment text
+  const crowdText = crowdSentimentBias === 'Bullish' || crowdSentimentBias === 'Very Bullish'
+    ? 'Crowd sentiment is bullish'
+    : crowdSentimentBias === 'Bearish' || crowdSentimentBias === 'Very Bearish'
+    ? 'Crowd sentiment is bearish'
+    : 'Crowd sentiment is mixed';
+
+  // Macro metrics — determine primary economy
+  let econCode = 'US';
+  const { asset, links } = assetDef;
+  if (asset.asset_class === 'fx' && asset.base_currency) {
+    const ccyToEcon: Record<string, string> = {
+      EUR: 'EU', GBP: 'UK', USD: 'US', JPY: 'JP',
+      AUD: 'AU', NZD: 'NZ', CAD: 'CA', CHF: 'CH',
+    };
+    econCode = ccyToEcon[asset.base_currency] ?? 'US';
+  } else {
+    econCode = (asset.metadata as Record<string, string>)?.economy ?? 'US';
+  }
+
+  const econReleases = macroReleases[econCode] || [];
+  const ecoMetrics = buildMetricRows(readings, econReleases, 'growth');
+  const inflMetrics = buildMetricRows(readings, econReleases, 'inflation');
+  const jobMetrics = buildMetricRows(readings, econReleases, 'jobs');
+
+  return {
+    tpScore,
+    technicalScore,
+    sentimentCotScore,
+    fundamentalsScore,
+    chartTrend: trendDaily ? directionToBias(trendDaily.direction) : mock.chartTrend,
+    seasonality: seasonalitySignal ? directionToBias(seasonalitySignal.direction) : mock.seasonality,
+    technicalOverall,
+    crowdSentiment: crowdText,
+    crowdSentimentBias,
+    cotOverall,
+    cotNetBias: cotNetSignal ? directionToBias(cotNetSignal.direction) : mock.cotNetBias,
+    cotLatestBias: cotPctlSignal ? directionToBias(cotPctlSignal.direction) : mock.cotLatestBias,
+    longPct,
+    shortPct,
+    weeklyChange,
+    economicOverall,
+    economicMetrics: ecoMetrics.length > 0 ? ecoMetrics : mock.economicMetrics,
+    inflationOverall,
+    inflationMetrics: inflMetrics.length > 0 ? inflMetrics : mock.inflationMetrics,
+    jobsOverall,
+    jobsMetrics: jobMetrics.length > 0 ? jobMetrics : mock.jobsMetrics,
+    // Fields that don't have live sources yet — keep mock
+    targets: mock.targets,
+    sma20: mock.sma20,
+    sma50: mock.sma50,
+    sma100: mock.sma100,
+    sma200: mock.sma200,
+    volatility: mock.volatility,
+    avgMove7d: mock.avgMove7d,
+    avgMove90d: mock.avgMove90d,
+    scoreHistory: mock.scoreHistory,
+    newsText: mock.newsText,
+    newsSources: mock.newsSources,
+  };
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
 // GAUGE COMPONENT (SVG)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -556,6 +741,7 @@ export default function AssetProfile() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { data: tpData, loading: tpLoading } = useTradePilotData();
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -577,22 +763,63 @@ export default function AssetProfile() {
     return filtered.sort((a, b) => a.localeCompare(b));
   }, [searchQuery]);
 
+  // Live scores from scoring engine (keyed by COT symbol)
+  const liveScores = useMemo((): Record<string, number> => {
+    if (!tpData) return {};
+    const result: Record<string, number> = {};
+    for (const def of ASSET_CATALOG) {
+      if (!def.cotSymbol) continue;
+      const card = tpData.scorecards[def.asset.symbol];
+      if (card) {
+        result[def.cotSymbol] = Math.round(card.total_score / 2);
+      }
+    }
+    return result;
+  }, [tpData]);
+
+  const useLive = !!tpData;
+
   const data = useMemo(() => {
-    return getSymbolData(selectedSymbol);
-  }, [selectedSymbol]);
+    const mock = getSymbolData(selectedSymbol);
+    if (!tpData) return mock;
+
+    // Map COT symbol → dataService symbol
+    const dsSymbol = COT_TO_DS_SYMBOL[selectedSymbol];
+    if (!dsSymbol) return mock;
+
+    const card = tpData.scorecards[dsSymbol];
+    if (!card) return mock;
+
+    const assetDef = ASSET_CATALOG.find(d => d.asset.symbol === dsSymbol);
+    if (!assetDef) return mock;
+
+    return scorecardToSymbolData(card, mock, tpData.macroReleases, assetDef);
+  }, [selectedSymbol, tpData]);
 
   const displayName = COT_SYMBOL_MAPPINGS[selectedSymbol]?.displayName || selectedSymbol;
   const bias = overallBias(data.tpScore);
-  const currentScore = SCORES[selectedSymbol] ?? 0;
+  const currentScore = useLive ? (liveScores[selectedSymbol] ?? SCORES[selectedSymbol] ?? 0) : (SCORES[selectedSymbol] ?? 0);
 
   return (
     <div className="h-full overflow-auto" style={{ background: 'var(--tp-l1)' }}>
       {/* ─── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--tp-border-subtle)' }}>
         <div className="flex items-center gap-3">
-          <div>
+          <div className="flex items-center gap-2.5">
             <span className="text-[15px]" style={{ fontWeight: 600, color: 'var(--tp-text-1)' }}>Asset Profile</span>
-            <span className="text-[11px] ml-3" style={{ color: 'var(--tp-text-3)' }}>tradepilot.app</span>
+            <span className="text-[11px]" style={{ color: 'var(--tp-text-3)' }}>tradepilot.app</span>
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md" style={{ background: 'var(--tp-l2)' }}>
+              {tpLoading ? (
+                <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--tp-text-3)' }} />
+              ) : useLive ? (
+                <Wifi className="w-3 h-3" style={{ color: 'var(--tp-bullish)' }} />
+              ) : (
+                <WifiOff className="w-3 h-3" style={{ color: 'var(--tp-bearish)' }} />
+              )}
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', color: useLive ? 'var(--tp-bullish)' : tpLoading ? 'var(--tp-text-3)' : 'var(--tp-bearish)' }}>
+                {tpLoading ? 'LOADING' : useLive ? 'LIVE' : 'MOCK'}
+              </span>
+            </div>
           </div>
         </div>
         <span className="text-[10px] max-w-[480px] text-right leading-tight" style={{ color: 'var(--tp-text-3)' }}>
@@ -657,7 +884,7 @@ export default function AssetProfile() {
                   {/* Symbol options */}
                   <div className="max-h-[240px] overflow-y-auto">
                     {sortedSymbols.map((sym) => {
-                      const s = SCORES[sym] ?? 0;
+                      const s = useLive ? (liveScores[sym] ?? SCORES[sym] ?? 0) : (SCORES[sym] ?? 0);
                       const isSelected = sym === selectedSymbol;
                       return (
                         <div

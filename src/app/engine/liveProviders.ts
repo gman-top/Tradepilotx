@@ -845,7 +845,7 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
       //   prod → Supabase Edge Function proxy (bypasses CORS server-side)
       const myfxbookUrl = import.meta.env.DEV
         ? '/api/myfxbook/get-community-outlook.json'
-        : `https://${SUPABASE_CONFIG.projectId}.supabase.co/functions/v1/make-server-d198f9ee/sentiment/myfxbook`;
+        : `${SUPABASE_CONFIG.url}/functions/v1/make-server-d198f9ee/sentiment/myfxbook`;
       const res = await fetch(myfxbookUrl, {
         headers: import.meta.env.DEV ? {} : { apikey: SUPABASE_CONFIG.anonKey },
         signal: AbortSignal.timeout(8000),
@@ -904,7 +904,7 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
     try {
       const url = import.meta.env.DEV
         ? '/api/myfxbook/get-community-outlook.json'
-        : `https://${SUPABASE_CONFIG.projectId}.supabase.co/functions/v1/make-server-d198f9ee/sentiment/myfxbook`;
+        : `${SUPABASE_CONFIG.url}/functions/v1/make-server-d198f9ee/sentiment/myfxbook`;
       const res = await fetch(url, {
         headers: import.meta.env.DEV ? {} : { apikey: SUPABASE_CONFIG.anonKey },
         signal: AbortSignal.timeout(5000),

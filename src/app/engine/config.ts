@@ -43,9 +43,8 @@ export const PROVIDERS_ENABLED = {
 
 /** Supabase project configuration */
 export const SUPABASE_CONFIG = {
-  projectId: 'wegeehbxrsokuknftkwc',
-  url: 'https://wegeehbxrsokuknftkwc.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlZ2VlaGJ4cnNva3VrbmZ0a3djIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2MTMzMDQsImV4cCI6MjA4NjE4OTMwNH0.bx1aUbvuLA3cqYKLr9pUKKmOtXfmEHla6G7I7VCrKps',
+  url: import.meta.env.VITE_SUPABASE_URL as string,
+  anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY as string,
 };
 
 // ─── LocalStorage Cache Helpers ───────────────────────────────────────────────

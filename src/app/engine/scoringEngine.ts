@@ -792,10 +792,10 @@ function scoreNonFXMacro(
   freshness: Record<string, string>,
 ) {
   // Determine the primary economy for this asset
+  // Use metadata.economy (code like 'US') — economy_id is a DB integer, not usable as key
   const primaryLink = snapshot.economy_links.find(l => l.role === 'primary');
-  const economyCode = primaryLink
-    ? String(primaryLink.economy_id)  // In production, resolve to code
-    : (asset.metadata as Record<string, string>).economy ?? 'US';
+  const economyCode = (asset.metadata as Record<string, string>).economy
+    ?? (primaryLink ? String(primaryLink.economy_id) : 'US');
 
   for (const macroConfig of MACRO_SCORING_CONFIGS) {
     const key = `${economyCode}:${macroConfig.indicator_key}`;

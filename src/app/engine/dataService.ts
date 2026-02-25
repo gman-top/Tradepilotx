@@ -3,11 +3,11 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // This is the SINGLE DATA SOURCE for ALL UI pages.
-// It wires together: Asset Catalog + Mock Providers + Scoring Engine.
+// It wires together: Asset Catalog + Live Providers + Scoring Engine.
 //
 // ARCHITECTURE:
 //   1. Define 20 tradeable assets with metadata & economy links
-//   2. Use mock providers to generate consistent data per asset
+//   2. Use live providers to fetch real data per asset
 //   3. Run the scoring engine to produce scorecards
 //   4. Export a React hook: useTradePilotData()
 //
@@ -43,12 +43,9 @@ import {
   type AssetDataSnapshot,
 } from './scoringEngine';
 
-import {
-  MockCOTProvider,
-  MockSentimentProvider,
-  MockMacroProvider,
-  MockRateProvider,
-} from './providers';
+import type { IPriceProvider } from './providers';
+import { createLiveRegistry } from './liveProviders';
+import { computeTechnicals } from './liveProviders';
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -155,69 +152,59 @@ const ASSET_CATALOG: AssetDef[] = [
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// DETERMINISTIC SEED HELPERS
+// SEASONALITY COMPUTATION (from real price data)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-function hash(str: string): number {
-  let h = 5381;
-  for (let i = 0; i < str.length; i++) {
-    h = ((h << 5) + h) + str.charCodeAt(i);
-    h = h & 0x7FFFFFFF;
-  }
-  return h;
-}
+/**
+ * Compute seasonality stats from historical OHLC closes.
+ * Uses daily closes to calculate monthly returns, then aggregates
+ * by month to find historical seasonal patterns.
+ */
+function computeSeasonalityFromPrices(closes: { date: string; close: number }[]): SeasonalityStat | null {
+  if (closes.length < 60) return null; // Need at least ~3 months of daily data
 
-function seededRandom(seed: number): number {
-  const x = Math.sin(seed * 9301 + 49297) * 233280;
-  return x - Math.floor(x);
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// MOCK DATA GENERATORS
-// ═══════════════════════════════════════════════════════════════════════════════
-
-function buildTechnical(symbol: string): TechnicalIndicator {
-  const s = hash(symbol + 'tech');
-  const trends: TrendDirection[] = ['strong_up', 'up', 'neutral', 'down', 'strong_down'];
-  const trend4h = trends[s % 5];
-  const trendDaily = trends[(s * 3) % 5];
-  const priceVsSma = -15 + (s % 30); // -15 to +15
-
-  return {
-    asset_id: 0,
-    timestamp: new Date().toISOString(),
-    timeframe: '1d',
-    sma_20: 100 + seededRandom(s) * 50,
-    sma_50: 98 + seededRandom(s + 1) * 50,
-    sma_100: 95 + seededRandom(s + 2) * 50,
-    sma_200: 90 + seededRandom(s + 3) * 50,
-    rsi_14: 30 + seededRandom(s + 4) * 40,
-    atr_14: seededRandom(s + 5) * 2,
-    volatility: 5 + seededRandom(s + 6) * 30,
-    trend_4h: trend4h,
-    trend_daily: trendDaily,
-    price_vs_sma200: priceVsSma,
-  };
-}
-
-function buildSeasonality(symbol: string): SeasonalityStat {
-  const s = hash(symbol + 'season');
   const month = new Date().getMonth() + 1;
-  const avgReturn = -2 + seededRandom(s + month) * 4;      // -2% to +2%
-  const winRate = 30 + seededRandom(s + month + 100) * 40;  // 30% to 70%
+
+  // Group closes by month and compute monthly returns
+  const monthlyReturns: Record<number, number[]> = {};
+  for (let m = 1; m <= 12; m++) monthlyReturns[m] = [];
+
+  // Find first and last close per month
+  const monthGroups: Record<string, { first: number; last: number }> = {};
+  for (const bar of closes) {
+    const d = new Date(bar.date);
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+    if (!monthGroups[key]) monthGroups[key] = { first: bar.close, last: bar.close };
+    monthGroups[key].last = bar.close;
+  }
+
+  for (const [key, { first, last }] of Object.entries(monthGroups)) {
+    const m = parseInt(key.split('-')[1]);
+    if (first > 0) {
+      monthlyReturns[m].push(((last - first) / first) * 100);
+    }
+  }
+
+  const returns = monthlyReturns[month];
+  if (returns.length === 0) return null;
+
+  const avg = returns.reduce((a, b) => a + b, 0) / returns.length;
+  const wins = returns.filter(r => r > 0).length;
+  const winRate = (wins / returns.length) * 100;
+  const sorted = [...returns].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
 
   return {
     asset_id: 0,
     month,
     day_of_year: null,
-    avg_return_10y: Math.round(avgReturn * 100) / 100,
+    avg_return_10y: Math.round(avg * 100) / 100,
     win_rate_10y: Math.round(winRate * 10) / 10,
-    median_return_10y: avgReturn * 0.8,
-    avg_return_5y: avgReturn * 1.1,
-    win_rate_5y: winRate - 2,
+    median_return_10y: Math.round(median * 100) / 100,
+    avg_return_5y: returns.length > 0 ? Math.round(avg * 110) / 100 : null, // approximate
+    win_rate_5y: Math.round(winRate * 10) / 10,
     cumulative_avg: null,
-    lookback_years: 10,
+    lookback_years: returns.length,
     computed_at: new Date().toISOString(),
   };
 }
@@ -227,10 +214,13 @@ function buildSeasonality(symbol: string): SeasonalityStat {
 // SNAPSHOT BUILDER — Assembles data for one asset
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const cotProvider = new MockCOTProvider();
-const sentimentProvider = new MockSentimentProvider();
-const macroProvider = new MockMacroProvider();
-const rateProvider = new MockRateProvider();
+// Initialize live registry (CFTC direct + FRED + TwelveData + Myfxbook)
+const _registry = createLiveRegistry();
+const cotProvider = _registry.cot;
+const sentimentProvider = _registry.sentiment;
+const macroProvider = _registry.macro;
+const rateProvider = _registry.rates;
+const priceProvider: IPriceProvider = _registry.price;
 
 async function buildSnapshot(def: AssetDef): Promise<AssetDataSnapshot> {
   const { asset, links, cotSymbol } = def;
@@ -274,16 +264,48 @@ async function buildSnapshot(def: AssetDef): Promise<AssetDataSnapshot> {
     Object.assign(interestRates, rateResult.data);
   }
 
+  // Real price data for technical indicators + seasonality
+  let technical: TechnicalIndicator | null = null;
+  let seasonality: SeasonalityStat | null = null;
+  try {
+    const ohlcResult = await priceProvider.fetchOHLC(asset.symbol, '1d', 200);
+    if (ohlcResult.ok && ohlcResult.data.length >= 20) {
+      const closes = ohlcResult.data.map(b => b.close);
+      const t = computeTechnicals(closes);
+      technical = {
+        asset_id: 0,
+        timestamp: new Date().toISOString(),
+        timeframe: '1d',
+        sma_20:   t.sma20,
+        sma_50:   t.sma50,
+        sma_100:  t.sma100,
+        sma_200:  t.sma200,
+        rsi_14:   t.rsi14,
+        atr_14:   null as any,
+        volatility: null as any,
+        trend_4h:       t.trend4h,
+        trend_daily:    t.trendDaily,
+        price_vs_sma200: t.priceVsSma200,
+      };
+      // Compute seasonality from real price history
+      seasonality = computeSeasonalityFromPrices(
+        ohlcResult.data.map(b => ({ date: b.timestamp, close: b.close }))
+      );
+    }
+  } catch {
+    // No price data available — technical and seasonality will be null
+  }
+
   return {
     asset,
     economy_links: links,
-    technical: buildTechnical(asset.symbol),
+    technical,
     cot_latest: cotLatest,
     cot_history: cotHistory,
     sentiment,
     macro_releases: macroReleases,
     interest_rates: interestRates,
-    seasonality: buildSeasonality(asset.symbol),
+    seasonality,
     data_timestamps: {},
   };
 }
@@ -333,6 +355,7 @@ export interface TradePilotData {
   regime: MacroRegime;
   macroReleases: Record<string, MacroRelease[]>;
   rates: Record<string, InterestRate>;
+  technicals: Record<string, TechnicalIndicator>;
   assets: AssetDef[];
   computedAt: string;
 }
@@ -514,6 +537,7 @@ async function computeAll(): Promise<TradePilotData> {
   const scorecards: Record<string, AssetScorecard> = {};
   const allMacroReleases: Record<string, MacroRelease[]> = {};
   const allRates: Record<string, InterestRate> = {};
+  const allTechnicals: Record<string, TechnicalIndicator> = {};
 
   // Fetch macro releases per economy (for Fundamentals page)
   for (const econ of ECONOMIES) {
@@ -530,6 +554,9 @@ async function computeAll(): Promise<TradePilotData> {
     const snapshot = await buildSnapshot(def);
     const scorecard = computeAssetScorecard(snapshot);
     scorecards[def.asset.symbol] = scorecard;
+    if (snapshot.technical) {
+      allTechnicals[def.asset.symbol] = snapshot.technical;
+    }
   }
 
   // Derive page-specific data
@@ -542,6 +569,7 @@ async function computeAll(): Promise<TradePilotData> {
     regime,
     macroReleases: allMacroReleases,
     rates: allRates,
+    technicals: allTechnicals,
     assets: ASSET_CATALOG,
     computedAt: new Date().toISOString(),
   };

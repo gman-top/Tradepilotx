@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { SUPABASE_CONFIG } from '../engine/config';
 
+// ─── Supabase Client ─────────────────────────────────────────────────────────
+export const supabase = createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});
+
+// ─── User Type ───────────────────────────────────────────────────────────────
 export interface User {
   id: string;
   email: string;
@@ -11,16 +23,25 @@ export interface User {
   settings: {
     defaultPage: string;
     compactMode: boolean;
-    dataSource: 'live' | 'mock';
+    dataSource: 'live';
+    notifications: {
+      weeklyCot: boolean;
+      biasChanges: boolean;
+      macroEvents: boolean;
+    };
   };
 }
 
+// ─── Auth Context Type ───────────────────────────────────────────────────────
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  isPasswordRecovery: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   loginWithProvider: (provider: 'google' | 'discord') => Promise<{ success: boolean; error?: string }>;
+  forgotPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+  clearPasswordRecovery: () => void;
   logout: () => void;
   updateUser: (updates: Partial<User>) => void;
   toggleFavorite: (asset: string) => void;
@@ -31,15 +52,10 @@ const noopAsync = async () => ({ success: false as const, error: 'No AuthProvide
 const noop = () => {};
 
 const defaultContext: AuthContextType = {
-  user: null,
-  isLoading: true,
-  login: noopAsync,
-  register: noopAsync,
-  loginWithProvider: noopAsync,
-  logout: noop,
-  updateUser: noop,
-  toggleFavorite: noop,
-  isFavorite: () => false,
+  user: null, isLoading: true, isPasswordRecovery: false,
+  login: noopAsync, register: noopAsync, loginWithProvider: noopAsync,
+  forgotPassword: noopAsync, clearPasswordRecovery: noop,
+  logout: noop, updateUser: noop, toggleFavorite: noop, isFavorite: () => false,
 };
 
 const AuthContext = createContext<AuthContextType>(defaultContext);
@@ -48,139 +64,153 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-const STORAGE_KEY = 'tradepilot_auth';
-const USERS_KEY = 'tradepilot_users';
+// ─── Local prefs storage (non-auth data stored in localStorage) ───────────────
+const PREFS_KEY = 'tp_user_prefs';
 
-function getStoredUsers(): Record<string, { password: string; user: User }> {
+function loadPrefs(userId: string): Partial<User> {
   try {
-    return JSON.parse(localStorage.getItem(USERS_KEY) || '{}');
-  } catch {
-    return {};
-  }
+    const raw = localStorage.getItem(`${PREFS_KEY}_${userId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
 }
 
-function saveStoredUsers(users: Record<string, { password: string; user: User }>) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+function savePrefs(userId: string, prefs: Partial<User>) {
+  try {
+    localStorage.setItem(`${PREFS_KEY}_${userId}`, JSON.stringify(prefs));
+  } catch {}
 }
 
+// ─── Build TradePilot User from Supabase session ──────────────────────────────
+function buildUser(sbUser: { id: string; email?: string; user_metadata?: Record<string, string>; created_at: string }, prefs: Partial<User> = {}): User {
+  return {
+    id: sbUser.id,
+    email: sbUser.email || '',
+    name: prefs.name || sbUser.user_metadata?.full_name || sbUser.user_metadata?.name || sbUser.email?.split('@')[0] || 'Trader',
+    avatarUrl: sbUser.user_metadata?.avatar_url || sbUser.user_metadata?.picture,
+    plan: prefs.plan || 'pro',
+    createdAt: sbUser.created_at,
+    favorites: prefs.favorites || ['XAU/USD', 'SPX500', 'EUR/USD'],
+    settings: {
+      defaultPage: prefs.settings?.defaultPage ?? 'overview',
+      compactMode: prefs.settings?.compactMode ?? false,
+      dataSource: prefs.settings?.dataSource ?? 'live',
+      notifications: {
+        weeklyCot: prefs.settings?.notifications?.weeklyCot ?? true,
+        biasChanges: prefs.settings?.notifications?.biasChanges ?? true,
+        macroEvents: prefs.settings?.notifications?.macroEvents ?? false,
+      },
+    },
+  };
+}
+
+// ─── AuthProvider ─────────────────────────────────────────────────────────────
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
-  // Restore session on mount
+  // Initialize: restore session from Supabase
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setUser(parsed);
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        const prefs = loadPrefs(session.user.id);
+        setUser(buildUser(session.user, prefs));
       }
-    } catch {
-      // ignore
-    }
-    setIsLoading(false);
+      setIsLoading(false);
+    });
+
+    // Listen for auth state changes (OAuth callbacks, token refresh, password recovery, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+
+      // Password recovery: user clicked reset link in email
+      if (_event === 'PASSWORD_RECOVERY') {
+        setIsPasswordRecovery(true);
+        if (session?.user) {
+          const prefs = loadPrefs(session.user.id);
+          setUser(buildUser(session.user, prefs));
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      if (session?.user) {
+        const prefs = loadPrefs(session.user.id);
+        setUser(buildUser(session.user, prefs));
+      } else {
+        setUser(null);
+        setIsPasswordRecovery(false);
+      }
+      setIsLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Persist session changes
+  // Persist local prefs when user changes
   useEffect(() => {
     if (user) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-      // Also update in users store
-      const users = getStoredUsers();
-      if (users[user.email]) {
-        users[user.email].user = user;
-        saveStoredUsers(users);
-      }
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
+      savePrefs(user.id, {
+        name: user.name,
+        plan: user.plan,
+        favorites: user.favorites,
+        settings: user.settings,
+      });
     }
   }, [user]);
 
   const login = useCallback(async (email: string, password: string) => {
-    await new Promise(r => setTimeout(r, 600)); // simulate network
-    const users = getStoredUsers();
-    const entry = users[email.toLowerCase()];
-    if (!entry) return { success: false, error: 'No account found with this email' };
-    if (entry.password !== password) return { success: false, error: 'Incorrect password' };
-    setUser(entry.user);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { success: false, error: error.message };
     return { success: true };
   }, []);
 
   const register = useCallback(async (name: string, email: string, password: string) => {
-    await new Promise(r => setTimeout(r, 800)); // simulate network
-    const users = getStoredUsers();
-    const key = email.toLowerCase();
-    if (users[key]) return { success: false, error: 'An account with this email already exists' };
-    
-    const newUser: User = {
-      id: crypto.randomUUID(),
-      email: key,
-      name,
-      plan: 'pro',
-      createdAt: new Date().toISOString(),
-      favorites: ['XAU/USD', 'SPX500', 'EUR/USD'],
-      settings: {
-        defaultPage: 'overview',
-        compactMode: false,
-        dataSource: 'live',
-      },
-    };
-    users[key] = { password, user: newUser };
-    saveStoredUsers(users);
-    setUser(newUser);
-    return { success: true };
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
+    if (error) return { success: false, error: error.message };
+
+    // Auto-confirm: if session returned immediately (email confirm disabled)
+    if (data.session) return { success: true };
+
+    // Email confirmation required
+    return { success: true, error: 'Check your email to confirm your account.' };
   }, []);
 
   const loginWithProvider = useCallback(async (provider: 'google' | 'discord') => {
-    // TODO: Replace with Supabase OAuth when connected
-    // supabase.auth.signInWithOAuth({ provider })
-    await new Promise(r => setTimeout(r, 1000)); // simulate OAuth redirect
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true }; // Redirect will happen
+  }, []);
 
-    const providerData = {
-      google: {
-        name: 'Alex Trader',
-        email: 'alex.trader@gmail.com',
-        avatarUrl: `https://ui-avatars.com/api/?name=Alex+Trader&background=4285F4&color=fff&size=128`,
-      },
-      discord: {
-        name: 'TraderAlex#1337',
-        email: 'alex_trader@discord.user',
-        avatarUrl: `https://ui-avatars.com/api/?name=Trader+Alex&background=5865F2&color=fff&size=128`,
-      },
-    };
-
-    const data = providerData[provider];
-    const users = getStoredUsers();
-    const key = data.email.toLowerCase();
-
-    // Auto-login or auto-register
-    if (users[key]) {
-      setUser(users[key].user);
-    } else {
-      const newUser: User = {
-        id: crypto.randomUUID(),
-        email: key,
-        name: data.name,
-        avatarUrl: data.avatarUrl,
-        plan: 'pro',
-        createdAt: new Date().toISOString(),
-        favorites: ['XAU/USD', 'SPX500', 'EUR/USD'],
-        settings: {
-          defaultPage: 'overview',
-          compactMode: false,
-          dataSource: 'live',
-        },
-      };
-      users[key] = { password: '', user: newUser };
-      saveStoredUsers(users);
-      setUser(newUser);
-    }
-
+  const forgotPassword = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (error) return { success: false, error: error.message };
     return { success: true };
   }, []);
 
-  const logout = useCallback(() => {
+  const clearPasswordRecovery = useCallback(() => {
+    setIsPasswordRecovery(false);
+  }, []);
+
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
+    setIsPasswordRecovery(false);
   }, []);
 
   const updateUser = useCallback((updates: Partial<User>) => {
@@ -202,7 +232,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user?.favorites]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, loginWithProvider, logout, updateUser, toggleFavorite, isFavorite }}>
+    <AuthContext.Provider value={{
+      user, isLoading, isPasswordRecovery,
+      login, register, loginWithProvider, forgotPassword, clearPasswordRecovery,
+      logout, updateUser, toggleFavorite, isFavorite,
+    }}>
       {children}
     </AuthContext.Provider>
   );

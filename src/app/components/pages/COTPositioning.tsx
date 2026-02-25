@@ -21,10 +21,23 @@ import {
 } from '../../utils/cotMappings';
 
 // ─── DATA SOURCE STATE ─────────────────────────────────────────────────────
-type DataSource = 'live' | 'partial' | 'mock' | 'loading' | 'error';
+type DataSource = 'live' | 'partial' | 'loading' | 'error' | 'empty';
 
-const LATEST_COT_RELEASE_DATE = 'Feb 3, 2026';
-const LATEST_COT_UPDATE_TIMESTAMP = 'Feb 3, 2026, 3:30 PM';
+// CFTC releases COT reports every Friday at 3:30 PM ET for the preceding Tuesday
+function getLatestCFTCRelease(): { releaseDate: string; releaseTimestamp: string } {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun 1=Mon 2=Tue 3=Wed 4=Thu 5=Fri 6=Sat
+  // Days back to most recent Friday
+  const daysBack = day === 5 ? 0 : day === 6 ? 1 : day + 2;
+  const lastFriday = new Date(now);
+  lastFriday.setDate(now.getDate() - daysBack);
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
+  const releaseDate = lastFriday.toLocaleDateString('en-US', opts);
+  const releaseTimestamp = releaseDate + ', 3:30 PM';
+  return { releaseDate, releaseTimestamp };
+}
+
+const { releaseDate: LATEST_COT_RELEASE_DATE, releaseTimestamp: LATEST_COT_UPDATE_TIMESTAMP } = getLatestCFTCRelease();
 
 type TraderType = 'Non-Commercials' | 'Commercials' | 'Retail' | 'All';
 
@@ -129,79 +142,6 @@ function getAbsMaxWeekly(data: COTWeeklyRow[], key: keyof COTWeeklyRow): number 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MOCK DATA (fallback)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const MOCK_LATEST: Record<TraderType, COTLatestRow[]> = {
-  'Non-Commercials': [
-    { asset: 'SILVER', netChangePct: 6.20, longContracts: 38883, shortContracts: 13006, deltaLong: -4592, deltaShort: -6766, longPct: 74.93, shortPct: 25.07, netPosition: 25877, starred: false, openInterest: '143K', deltaOI: -13457 },
-    { asset: 'CAD', netChangePct: 5.41, longContracts: 77397, shortContracts: 75267, deltaLong: 228, deltaShort: -17948, longPct: 50.70, shortPct: 49.30, netPosition: 2130, starred: false, openInterest: '216K', deltaOI: -10952 },
-    { asset: 'AUD', netChangePct: 4.50, longContracts: 118751, shortContracts: 92633, deltaLong: 8945, deltaShort: -10027, longPct: 56.18, shortPct: 43.82, netPosition: 26118, starred: false, openInterest: '254K', deltaOI: 2185 },
-    { asset: 'USD', netChangePct: 4.22, longContracts: 16610, shortContracts: 17462, deltaLong: -1335, deltaShort: -4888, longPct: 48.75, shortPct: 51.25, netPosition: -852, starred: false, openInterest: '28K', deltaOI: -3556 },
-    { asset: 'EUR', netChangePct: 3.78, longContracts: 302301, shortContracts: 138940, deltaLong: 11965, deltaShort: -19262, longPct: 68.51, shortPct: 31.49, netPosition: 163361, starred: true, openInterest: '910K', deltaOI: -8820 },
-    { asset: 'NZD', netChangePct: 3.67, longContracts: 11883, shortContracts: 46177, deltaLong: -191, deltaShort: -13642, longPct: 20.47, shortPct: 79.53, netPosition: -34294, starred: false, openInterest: '71K', deltaOI: -14248 },
-    { asset: 'JPY', netChangePct: 3.11, longContracts: 114428, shortContracts: 133650, deltaLong: 9968, deltaShort: -4743, longPct: 46.13, shortPct: 53.87, netPosition: -19222, starred: false, openInterest: '304K', deltaOI: 2947 },
-    { asset: 'USOIL', netChangePct: 2.47, longContracts: 315529, shortContracts: 190964, deltaLong: 20282, deltaShort: -7301, longPct: 62.30, shortPct: 37.70, netPosition: 124565, starred: false, openInterest: '2091K', deltaOI: 55665 },
-    { asset: 'PLATINUM', netChangePct: 1.34, longContracts: 31468, shortContracts: 18362, deltaLong: -4951, deltaShort: -4135, longPct: 63.15, shortPct: 36.85, netPosition: 13106, starred: false, openInterest: '74K', deltaOI: -5851 },
-    { asset: 'NIKKEI', netChangePct: 1.09, longContracts: 8999, shortContracts: 4789, deltaLong: 2332, deltaShort: 1068, longPct: 65.27, shortPct: 34.73, netPosition: 4210, starred: false, openInterest: '32K', deltaOI: -122 },
-    { asset: 'GBP', netChangePct: 0.80, longContracts: 94893, shortContracts: 108804, deltaLong: 7107, deltaShort: 4856, longPct: 46.59, shortPct: 53.41, netPosition: -13911, starred: false, openInterest: '228K', deltaOI: 3429 },
-    { asset: 'COPPER', netChangePct: 0.59, longContracts: 97407, shortContracts: 49593, deltaLong: -3993, deltaShort: -3417, longPct: 66.26, shortPct: 33.74, netPosition: 47814, starred: false, openInterest: '279K', deltaOI: 626 },
-    { asset: 'CHF', netChangePct: 0.52, longContracts: 9687, shortContracts: 50404, deltaLong: -37, deltaShort: -2213, longPct: 16.12, shortPct: 83.88, netPosition: -40717, starred: false, openInterest: '94K', deltaOI: -2556 },
-    { asset: 'US10T', netChangePct: 0.44, longContracts: 698068, shortContracts: 1427482, deltaLong: 29322, deltaShort: 32585, longPct: 32.84, shortPct: 67.16, netPosition: -729414, starred: false, openInterest: '5495K', deltaOI: -195724 },
-    { asset: 'BTC', netChangePct: 0.39, longContracts: 18939, shortContracts: 17931, deltaLong: 885, deltaShort: 567, longPct: 51.37, shortPct: 48.63, netPosition: 1008, starred: false, openInterest: '23K', deltaOI: -1232 },
-    { asset: 'DOW', netChangePct: -0.13, longContracts: 20011, shortContracts: 18964, deltaLong: -33, deltaShort: 64, longPct: 51.34, shortPct: 48.66, netPosition: 1047, starred: false, openInterest: '70K', deltaOI: -895 },
-    { asset: 'RUSSELL', netChangePct: -2.05, longContracts: 92836, shortContracts: 88538, deltaLong: -8727, deltaShort: -698, longPct: 51.18, shortPct: 48.82, netPosition: 4298, starred: false, openInterest: '407K', deltaOI: -9364 },
-    { asset: 'SPX', netChangePct: -2.12, longContracts: 244946, shortContracts: 374275, deltaLong: 223, deltaShort: 31805, longPct: 39.56, shortPct: 60.44, netPosition: -129329, starred: false, openInterest: '1950K', deltaOI: 33549 },
-    { asset: 'Gold', netChangePct: -2.94, longContracts: 214508, shortContracts: 48904, deltaLong: -37592, deltaShort: 2200, longPct: 81.43, shortPct: 18.57, netPosition: 165604, starred: true, openInterest: '410K', deltaOI: -78769 },
-    { asset: 'NASDAQ', netChangePct: -4.72, longContracts: 83886, shortContracts: 69699, deltaLong: -5593, deltaShort: 8375, longPct: 54.62, shortPct: 45.38, netPosition: 14187, starred: true, openInterest: '269K', deltaOI: 8064 },
-  ],
-  'Commercials': [
-    { asset: 'EUR', netChangePct: -3.78, longContracts: 188952, shortContracts: 329527, deltaLong: -305, deltaShort: 46030, longPct: 36.44, shortPct: 63.56, netPosition: -140575, starred: true, openInterest: '910K', deltaOI: -8820 },
-    { asset: 'Gold', netChangePct: 2.94, longContracts: 321654, shortContracts: 63722, deltaLong: 25482, deltaShort: 3650, longPct: 83.46, shortPct: 16.54, netPosition: 257932, starred: true, openInterest: '410K', deltaOI: -78769 },
-    { asset: 'SPX', netChangePct: 2.12, longContracts: 374275, shortContracts: 244946, deltaLong: 31805, deltaShort: 223, longPct: 60.44, shortPct: 39.56, netPosition: 129329, starred: false, openInterest: '1950K', deltaOI: 33549 },
-  ],
-  'Retail': [
-    { asset: 'NZD', netChangePct: 5.67, longContracts: 28000, shortContracts: 12000, deltaLong: 8000, deltaShort: -2000, longPct: 70.00, shortPct: 30.00, netPosition: 16000, starred: false, openInterest: '85K', deltaOI: -3308 },
-    { asset: 'NASDAQ', netChangePct: -6.78, longContracts: 98000, shortContracts: 12000, deltaLong: -28000, deltaShort: 8000, longPct: 89.09, shortPct: 10.91, netPosition: 86000, starred: true, openInterest: '302K', deltaOI: -156 },
-    { asset: 'Gold', netChangePct: -2.15, longContracts: 42384, shortContracts: 88225, deltaLong: -8482, deltaShort: 12650, longPct: 32.45, shortPct: 67.55, netPosition: -45841, starred: true, openInterest: '534K', deltaOI: 1820 },
-  ],
-  'All': [
-    { asset: 'EUR', netChangePct: -1.15, longContracts: 319904, shortContracts: 347054, deltaLong: -17995, deltaShort: 22000, longPct: 47.97, shortPct: 52.03, netPosition: -27150, starred: true, openInterest: '653K', deltaOI: -77140 },
-    { asset: 'Gold', netChangePct: 1.02, longContracts: 528790, shortContracts: 193735, deltaLong: 4962, deltaShort: 15200, longPct: 73.18, shortPct: 26.82, netPosition: 335055, starred: true, openInterest: '534K', deltaOI: 18204 },
-    { asset: 'SPX', netChangePct: -2.48, longContracts: 482768, shortContracts: 268450, deltaLong: -28000, deltaShort: 8000, longPct: 64.28, shortPct: 35.72, netPosition: 214318, starred: false, openInterest: '428K', deltaOI: -24832 },
-  ],
-};
-
-function generateMockWeekly(symbol: string): COTWeeklyRow[] {
-  const hash = symbol.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const seed = (i: number) => ((hash * 31 + i * 17) % 100) / 100;
-  const baseLong = 50000 + Math.floor(seed(0) * 200000);
-  const baseShort = 30000 + Math.floor(seed(1) * 150000);
-  const data: COTWeeklyRow[] = [];
-  const startDate = new Date('2026-02-03');
-  for (let w = 0; w < 66; w++) {
-    const d = new Date(startDate);
-    d.setDate(d.getDate() - 7 * w);
-    const variance = Math.sin(w * 0.3 + seed(2) * 10) * 0.2;
-    const lc = Math.max(5000, Math.floor(baseLong * (1 + variance)));
-    const sc = Math.max(5000, Math.floor(baseShort * (1 - variance * 0.8)));
-    const total = lc + sc;
-    data.push({
-      date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
-      netChangePct: Math.round((Math.sin(w * 0.5 + seed(3) * 6) * 5 + (seed(w % 10) - 0.5) * 4) * 100) / 100,
-      longContracts: lc,
-      shortContracts: sc,
-      deltaLong: Math.floor((Math.sin(w * 0.7 + 1) * 0.5 + seed(w % 7) - 0.5) * 15000),
-      deltaShort: Math.floor((Math.cos(w * 0.6 + 2) * 0.5 + seed(w % 8) - 0.5) * 12000),
-      longPct: Math.round((lc / total) * 10000) / 100,
-      shortPct: Math.round((sc / total) * 10000) / 100,
-      netPosition: lc - sc,
-    });
-  }
-  return data;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -236,10 +176,10 @@ export default function COTPositioning() {
         setLiveReportDate(result.reportDate);
         setDataSource(result.source);
       } else {
-        setDataSource('mock');
+        setDataSource('empty');
       }
     } catch {
-      if (currentFetch === fetchCountRef.current) setDataSource('mock');
+      if (currentFetch === fetchCountRef.current) setDataSource('error');
     }
   }, [traderType]);
 
@@ -258,13 +198,13 @@ export default function COTPositioning() {
       } else {
         setLiveWeeklyData([]);
         setLiveHistoryNetPositions([]);
-        setDataSource('mock');
+        setDataSource('empty');
       }
     } catch {
       if (currentFetch === fetchCountRef.current) {
         setLiveWeeklyData([]);
         setLiveHistoryNetPositions([]);
-        setDataSource('mock');
+        setDataSource('error');
       }
     }
   }, [traderType]);
@@ -325,8 +265,8 @@ export default function COTPositioning() {
         starred: false, openInterest: r.openInterest, deltaOI: r.deltaOI, reportDate: r.reportDate,
       }));
     }
-    return MOCK_LATEST[traderType] || [];
-  }, [useLiveData, liveLatestData, traderType]);
+    return [];
+  }, [useLiveData, liveLatestData]);
 
   const effectiveWeeklyData = useMemo((): COTWeeklyRow[] => {
     if (selectedAsset === 'All') return [];
@@ -337,8 +277,8 @@ export default function COTPositioning() {
         longPct: r.longPct, shortPct: r.shortPct, netPosition: r.netPosition,
       }));
     }
-    return generateMockWeekly(selectedAsset);
-  }, [selectedAsset, useLiveData, liveWeeklyData, traderType]);
+    return [];
+  }, [selectedAsset, useLiveData, liveWeeklyData]);
 
   // ─── SORTING ─────────────────────────────────────────────────────────────
   const handleSort = (column: string) => {
@@ -421,10 +361,10 @@ export default function COTPositioning() {
       ) : useLiveData ? (
         <Wifi className="w-3 h-3" style={{ color: 'var(--tp-bullish)' }} />
       ) : (
-        <WifiOff className="w-3 h-3" style={{ color: 'var(--tp-bearish)' }} />
+        <WifiOff className="w-3 h-3" style={{ color: 'var(--tp-text-3)' }} />
       )}
-      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', color: useLiveData ? 'var(--tp-bullish)' : dataSource === 'loading' ? 'var(--tp-text-3)' : 'var(--tp-bearish)' }}>
-        {dataSource === 'loading' ? 'LOADING' : useLiveData ? 'LIVE' : 'MOCK'}
+      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', color: useLiveData ? 'var(--tp-bullish)' : 'var(--tp-text-3)' }}>
+        {dataSource === 'loading' ? 'LOADING' : useLiveData ? 'LIVE' : dataSource === 'error' ? 'ERROR' : 'NO DATA'}
       </span>
     </div>
   );

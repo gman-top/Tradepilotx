@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { User, Shield, Star, Bell, Monitor, LogOut, Check, X } from 'lucide-react';
-import { useAuth } from '../AuthContext';
+import { User, Shield, Star, Bell, Monitor, LogOut, Check, X, Wifi, Loader2, Database, Eye, EyeOff, WifiOff } from 'lucide-react';
+import { useAuth, supabase } from '../AuthContext';
+import { PROVIDERS_ENABLED } from '../../engine/config';
+import { useTradePilotData } from '../../engine/dataService';
 
 const C = {
   l1: 'var(--tp-l1)', l2: 'var(--tp-l2)', l3: 'var(--tp-l3)',
@@ -14,6 +16,7 @@ export default function AccountPage() {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(user?.name || '');
   const [saved, setSaved] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   if (!user) return null;
 
@@ -47,6 +50,8 @@ export default function AccountPage() {
     enterprise: { label: 'Enterprise', color: C.bullish, bg: 'rgba(52,211,153,0.1)' },
   }[user.plan];
 
+  const notif = user.settings.notifications;
+
   return (
     <div className="p-5 md:p-8 lg:p-10">
       {/* Saved toast */}
@@ -58,6 +63,14 @@ export default function AccountPage() {
           <Check style={{ width: 14, height: 14, color: C.bullish }} />
           <span style={{ fontSize: 12, fontWeight: 500, color: C.bullish }}>Settings saved</span>
         </div>
+      )}
+
+      {/* Change password modal */}
+      {showPasswordModal && (
+        <ChangePasswordModal
+          onClose={() => setShowPasswordModal(false)}
+          onSuccess={() => { setShowPasswordModal(false); showSaved(); }}
+        />
       )}
 
       {/* Header */}
@@ -74,12 +87,21 @@ export default function AccountPage() {
           <div className="rounded-xl p-6" style={{ background: C.l2, border: `1px solid ${C.borderSubtle}` }}>
             {/* Avatar */}
             <div className="flex flex-col items-center mb-6">
-              <div
-                className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
-                style={{ background: 'var(--tp-accent-muted)', border: '2px solid var(--tp-accent)' }}
-              >
-                <span style={{ fontSize: 24, fontWeight: 700, color: C.accent }}>{initials}</span>
-              </div>
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt={user.name}
+                  className="w-20 h-20 rounded-full mb-4 object-cover"
+                  style={{ border: '2px solid var(--tp-accent)' }}
+                />
+              ) : (
+                <div
+                  className="w-20 h-20 rounded-full flex items-center justify-center mb-4"
+                  style={{ background: 'var(--tp-accent-muted)', border: '2px solid var(--tp-accent)' }}
+                >
+                  <span style={{ fontSize: 24, fontWeight: 700, color: C.accent }}>{initials}</span>
+                </div>
+              )}
               {editingName ? (
                 <div className="flex items-center gap-2">
                   <input
@@ -173,30 +195,11 @@ export default function AccountPage() {
                 checked={user.settings.compactMode}
                 onChange={v => { updateUser({ settings: { ...user.settings, compactMode: v } }); showSaved(); }}
               />
-              <div className="flex items-center justify-between">
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.t1 }}>Data source</div>
-                  <div style={{ fontSize: 11, color: C.t3 }}>Fallback mode for COT data</div>
-                </div>
-                <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderSubtle}` }}>
-                  {(['live', 'mock'] as const).map(opt => (
-                    <button
-                      key={opt}
-                      onClick={() => { updateUser({ settings: { ...user.settings, dataSource: opt } }); showSaved(); }}
-                      className="px-3 py-1.5 transition-colors"
-                      style={{
-                        fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em',
-                        background: user.settings.dataSource === opt ? 'var(--tp-accent-muted)' : 'transparent',
-                        color: user.settings.dataSource === opt ? C.accent : C.t3,
-                      }}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </SettingsSection>
+
+          {/* Data Sources */}
+          <DataSourcesPanel />
 
           {/* Notifications */}
           <SettingsSection icon={Bell} title="Notifications" description="Alert preferences">
@@ -204,20 +207,29 @@ export default function AccountPage() {
               <ToggleRow
                 label="Weekly COT alerts"
                 description="Get notified when new COT data is released"
-                checked={true}
-                onChange={() => showSaved()}
+                checked={notif.weeklyCot}
+                onChange={v => {
+                  updateUser({ settings: { ...user.settings, notifications: { ...notif, weeklyCot: v } } });
+                  showSaved();
+                }}
               />
               <ToggleRow
                 label="Bias changes"
                 description="Alert when TradePilot bias changes for favorites"
-                checked={true}
-                onChange={() => showSaved()}
+                checked={notif.biasChanges}
+                onChange={v => {
+                  updateUser({ settings: { ...user.settings, notifications: { ...notif, biasChanges: v } } });
+                  showSaved();
+                }}
               />
               <ToggleRow
                 label="Macro events"
                 description="High-impact economic releases"
-                checked={false}
-                onChange={() => showSaved()}
+                checked={notif.macroEvents}
+                onChange={v => {
+                  updateUser({ settings: { ...user.settings, notifications: { ...notif, macroEvents: v } } });
+                  showSaved();
+                }}
               />
             </div>
           </SettingsSection>
@@ -227,9 +239,10 @@ export default function AccountPage() {
             <div className="flex items-center justify-between">
               <div>
                 <div style={{ fontSize: 13, fontWeight: 500, color: C.t1 }}>Password</div>
-                <div style={{ fontSize: 11, color: C.t3 }}>Last changed: Never</div>
+                <div style={{ fontSize: 11, color: C.t3 }}>Update your account password</div>
               </div>
               <button
+                onClick={() => setShowPasswordModal(true)}
                 className="rounded-lg px-3.5 py-1.5 transition-colors"
                 style={{ fontSize: 12, fontWeight: 500, color: C.accent, background: 'var(--tp-accent-muted)', border: '1px solid transparent' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
@@ -240,6 +253,141 @@ export default function AccountPage() {
             </div>
           </SettingsSection>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Change Password Modal ─────────────────────────────────────────────────── */
+function ChangePasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { setError('Passwords do not match'); return; }
+
+    setLoading(true);
+    try {
+      const { error: sbError } = await supabase.auth.updateUser({ password: newPassword });
+      if (sbError) {
+        setError(sbError.message);
+      } else {
+        onSuccess();
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="rounded-xl p-6 w-full relative"
+        style={{ maxWidth: 400, background: 'var(--tp-l2)', border: '1px solid var(--tp-border)', boxShadow: '0 24px 64px rgba(0,0,0,0.6)' }}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1 rounded-md transition-colors"
+          style={{ color: 'var(--tp-text-3)' }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--tp-l3)'; e.currentTarget.style.color = 'var(--tp-text-2)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--tp-text-3)'; }}
+        >
+          <X style={{ width: 16, height: 16 }} />
+        </button>
+
+        <div className="mb-6">
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--tp-text-1)', letterSpacing: '-0.02em', marginBottom: 4 }}>
+            Change password
+          </h3>
+          <p style={{ fontSize: 12, color: 'var(--tp-text-3)' }}>
+            Choose a strong password (min. 6 characters)
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>
+              New password
+            </label>
+            <div className="relative">
+              <input
+                type={showNew ? 'text' : 'password'}
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Min. 6 characters"
+                required
+                disabled={loading}
+                className="w-full rounded-lg px-3.5 py-2.5 pr-10 focus:outline-none"
+                style={{ background: 'var(--tp-l3)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+              />
+              <button type="button" onClick={() => setShowNew(!showNew)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--tp-text-3)' }}>
+                {showNew ? <EyeOff style={{ width: 15, height: 15 }} /> : <Eye style={{ width: 15, height: 15 }} />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-2)', display: 'block', marginBottom: 6 }}>
+              Confirm password
+            </label>
+            <div className="relative">
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Repeat new password"
+                required
+                disabled={loading}
+                className="w-full rounded-lg px-3.5 py-2.5 pr-10 focus:outline-none"
+                style={{ background: 'var(--tp-l3)', border: '1px solid var(--tp-border)', color: 'var(--tp-text-1)', fontSize: 13 }}
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--tp-accent)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--tp-border)'; }}
+              />
+              <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--tp-text-3)' }}>
+                {showConfirm ? <EyeOff style={{ width: 15, height: 15 }} /> : <Eye style={{ width: 15, height: 15 }} />}
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-lg px-3.5 py-2.5" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+              <span style={{ fontSize: 12, color: 'var(--tp-bearish)' }}>{error}</span>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 rounded-lg py-2.5 transition-colors"
+              style={{ fontSize: 13, fontWeight: 500, color: 'var(--tp-text-2)', background: 'var(--tp-l3)', border: '1px solid var(--tp-border)' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 transition-colors"
+              style={{ fontSize: 13, fontWeight: 600, color: '#fff', background: loading ? 'var(--tp-l3)' : 'var(--tp-accent)', opacity: loading ? 0.7 : 1 }}
+            >
+              {loading ? <Loader2 style={{ width: 15, height: 15 }} className="animate-spin" /> : 'Update password'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -264,6 +412,98 @@ function SettingsSection({ icon: Icon, title, description, children }: {
       </div>
       {children}
     </div>
+  );
+}
+
+function DataSourcesPanel() {
+  const { data, loading } = useTradePilotData();
+
+  const sources: { name: string; status: 'live' | 'unavailable' | 'loading'; detail: string }[] = [
+    {
+      name: 'COT (CFTC)',
+      status: loading ? 'loading' : 'live',
+      detail: 'CFTC SODA API — no key required',
+    },
+    {
+      name: 'Macro (FRED)',
+      status: loading ? 'loading' : PROVIDERS_ENABLED.fred ? 'live' : 'unavailable',
+      detail: PROVIDERS_ENABLED.fred ? 'FRED API connected (US + international)' : 'Set VITE_FRED_API_KEY in .env',
+    },
+    {
+      name: 'Price & Technicals',
+      status: loading ? 'loading' : PROVIDERS_ENABLED.twelveData ? 'live' : 'unavailable',
+      detail: PROVIDERS_ENABLED.twelveData ? 'TwelveData API connected' : 'Set VITE_TWELVE_DATA_API_KEY in .env',
+    },
+    {
+      name: 'Retail Sentiment',
+      status: loading ? 'loading' : 'live',
+      detail: 'Myfxbook community outlook — no key required',
+    },
+    {
+      name: 'Interest Rates',
+      status: loading ? 'loading' : PROVIDERS_ENABLED.fred ? 'live' : 'unavailable',
+      detail: PROVIDERS_ENABLED.fred ? 'FRED API (US + international yields)' : 'Set VITE_FRED_API_KEY in .env',
+    },
+    {
+      name: 'Scoring Engine',
+      status: loading ? 'loading' : data ? 'live' : 'unavailable',
+      detail: data ? `${Object.keys(data.scorecards).length} assets scored` : 'Waiting for data...',
+    },
+  ];
+
+  const liveCount = sources.filter(s => s.status === 'live').length;
+  const totalCount = sources.length;
+
+  return (
+    <SettingsSection icon={Database} title="Data Sources" description="Live provider status">
+      <div className="space-y-2.5">
+        {/* Summary bar */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {loading ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" style={{ color: C.t3 }} />
+            ) : (
+              <Wifi className="w-3.5 h-3.5" style={{ color: liveCount === totalCount ? C.bullish : C.accent }} />
+            )}
+            <span style={{ fontSize: 12, fontWeight: 600, color: loading ? C.t3 : C.t1 }}>
+              {loading ? 'Connecting...' : `${liveCount}/${totalCount} providers live`}
+            </span>
+          </div>
+          {data && (
+            <span style={{ fontSize: 10, color: C.t3 }}>
+              Updated: {new Date(data.computedAt).toLocaleTimeString()}
+            </span>
+          )}
+        </div>
+
+        {/* Provider rows */}
+        {sources.map(src => (
+          <div key={src.name} className="flex items-center justify-between py-1.5">
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 500, color: C.t1 }}>{src.name}</div>
+              <div style={{ fontSize: 10, color: C.t3 }}>{src.detail}</div>
+            </div>
+            <span
+              className="rounded-md px-2 py-0.5"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+                color: src.status === 'live' ? C.bullish : src.status === 'loading' ? C.t3 : C.bearish,
+                background: src.status === 'live'
+                  ? 'rgba(52,211,153,0.1)'
+                  : src.status === 'loading'
+                  ? C.l3
+                  : 'rgba(248,113,113,0.1)',
+              }}
+            >
+              {src.status === 'loading' ? 'LOADING' : src.status === 'live' ? 'LIVE' : 'N/A'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </SettingsSection>
   );
 }
 

@@ -19,4 +19,15 @@ export default defineConfig({
 
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
+
+  // Dev proxy — routes /api/* to external APIs to bypass CORS in development
+  server: {
+    proxy: {
+      '/api/myfxbook': {
+        target: 'https://www.myfxbook.com',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/myfxbook/, '/api'),
+      },
+    },
+  },
 })

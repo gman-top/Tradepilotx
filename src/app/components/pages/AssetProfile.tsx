@@ -1,7 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Search, ChevronDown } from 'lucide-react';
+import { Search, ChevronDown, Loader2, Wifi } from 'lucide-react';
 import { BarChart, Bar, XAxis, ReferenceLine, ResponsiveContainer, Cell, Tooltip } from 'recharts';
 import { COT_AVAILABLE_SYMBOLS, COT_SYMBOL_MAPPINGS } from '../../utils/cotMappings';
+import { useTradePilotData, ASSET_CATALOG, type AssetDef } from '../../engine/dataService';
+import type { AssetScorecard, SignalInput } from '../../types/scoring';
+import type { MacroRelease, TechnicalIndicator } from '../../types/database';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -91,202 +94,233 @@ const overallBias = (s: number): BiasLevel => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SYMBOL TP SCORES (all 19 symbols)
+// DEFAULT EMPTY DATA (shown while live data loads)
 // ═══════════════════════════════════════════════════════════════════════════════
-const SCORES: Record<string, number> = {
-  Gold: 1, SILVER: -3, PLATINUM: -2, USOIL: 0, SPX: -5,
-  NASDAQ: -4, DOW: -1, RUSSELL: 0, NIKKEI: -1, EUR: -2,
-  GBP: 1, JPY: -1, AUD: -3, NZD: -2, CAD: 1,
-  CHF: 0, USD: 2, COPPER: 1, BTC: -1, US10T: 1,
-};
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// DETAILED MOCK DATA
-// ═══════════════════════════════════════════════════════════════════════════════
-const SPX_DATA: SymbolData = {
-  tpScore: -5, technicalScore: -3, sentimentCotScore: -2, fundamentalsScore: 0,
-  chartTrend: 'Bearish', seasonality: 'Bearish', technicalOverall: 'Very Bearish',
-  crowdSentiment: 'Crowd sentiment is mixed', crowdSentimentBias: 'Neutral',
-  cotOverall: 'Bearish', cotNetBias: 'Bearish', cotLatestBias: 'Bearish',
-  longPct: 39.56, shortPct: 60.44, weeklyChange: -2.12,
-  economicOverall: 'Very Bullish',
-  economicMetrics: [
-    { metric: 'GDP Growth QoQ', bias: 'Bullish', actual: '4.40%', forecast: '4.30%', surprise: '0.10%' },
-    { metric: 'Manufacturing PMIS', bias: 'Bullish', actual: '52.6', forecast: '48.5', surprise: '4.10' },
-    { metric: 'Services PMIS', bias: 'Bullish', actual: '53.8', forecast: '53.5', surprise: '0.30' },
-    { metric: 'Retail Sales MoM', bias: 'Bullish', actual: '0.60', forecast: '0.50', surprise: '0.10' },
-    { metric: 'Consumer Confidence', bias: 'Bearish', actual: '84.5', forecast: '90.6', surprise: '-6' },
-  ],
-  inflationOverall: 'Neutral',
-  inflationMetrics: [
-    { metric: 'CPI YoY', bias: 'Neutral', actual: '2.7%', forecast: '2.7%', surprise: '0.0%' },
-    { metric: 'PPI YoY', bias: 'Bearish', actual: '3%', forecast: '2.7%', surprise: '0.3%' },
-    { metric: 'PCE YoY', bias: 'Neutral', actual: '2.8%', forecast: '2.8%', surprise: '0%' },
-    { metric: 'US02Yield (21 day SMA)', bias: 'Bullish', actual: '', forecast: '', surprise: '' },
-  ],
-  jobsOverall: 'Very Bearish',
-  jobsMetrics: [
-    { metric: 'Non-Farm Payroll', bias: 'Bearish', actual: '50k', forecast: '66k', surprise: '-16k' },
-    { metric: 'Unemployment Rate %', bias: 'Bullish', actual: '4.40%', forecast: '4.50%', surprise: '-0.10%' },
-    { metric: 'Weekly Jobless Claims', bias: 'Bearish', actual: '231k', forecast: '212k', surprise: '19k' },
-    { metric: 'ADP Employment Change', bias: 'Bearish', actual: '22', forecast: '46', surprise: '-24' },
-    { metric: 'JOLTS Job Openings', bias: 'Bearish', actual: '6.54M', forecast: '7.20M', surprise: '-0.66M' },
-  ],
-  targets: [6875.58, 6824.58, 6773.58],
-  sma20: 'Bullish', sma50: 'Bullish', sma100: 'Bullish', sma200: 'Bullish',
-  volatility: 'High', avgMove7d: '0.8%', avgMove90d: '0.6%',
-  scoreHistory: [
-    { date: 'Dec 26', score: -1 }, { date: 'Dec 30', score: -2 },
-    { date: 'Jan 3', score: -3 }, { date: 'Jan 7', score: -2 },
-    { date: 'Jan 11', score: -4 }, { date: 'Jan 15', score: -3 },
-    { date: 'Jan 19', score: -5 }, { date: 'Jan 23', score: -4 },
-    { date: 'Jan 27', score: -5 }, { date: 'Jan 31', score: -5 },
-    { date: 'Feb 4', score: -5 }, { date: 'Feb 8', score: -5 },
-  ],
-  newsText: 'US growth slowdown and tumbling confidence underpin broader dollar weakness impacting equities, with Trump presidency uncertainties reinforcing bearish USD sentiment relevant to S&P 500 performance[1]. Federal Reserve\'s 175 bps cuts since September 2024 and unchanged funds rate at 3.75%-4.00% in January signal potential further easing, pressuring yields and supporting index resilience[3]. Recent market data shows mid-table G10 currency strength translating to stable equity sentiment, with forecasts implying upside if dollar debasement persists without sharp volatility[3].',
-  newsSources: [{ id: 1, label: 'source 1' }, { id: 3, label: 'source 3' }],
-};
-
-const GOLD_DATA: SymbolData = {
-  tpScore: 1, technicalScore: 2, sentimentCotScore: 1, fundamentalsScore: -1,
-  chartTrend: 'Bullish', seasonality: 'Bullish', technicalOverall: 'Bullish',
-  crowdSentiment: 'Crowd sentiment is bullish', crowdSentimentBias: 'Bullish',
-  cotOverall: 'Bullish', cotNetBias: 'Bullish', cotLatestBias: 'Bullish',
-  longPct: 68.20, shortPct: 31.80, weeklyChange: 4.50,
-  economicOverall: 'Very Bullish',
-  economicMetrics: SPX_DATA.economicMetrics,
-  inflationOverall: 'Neutral',
-  inflationMetrics: [
-    { metric: 'CPI YoY', bias: 'Neutral', actual: '2.7%', forecast: '2.7%', surprise: '0.0%' },
-    { metric: 'PPI YoY', bias: 'Bullish', actual: '3%', forecast: '2.7%', surprise: '0.3%' },
-    { metric: 'PCE YoY', bias: 'Neutral', actual: '2.8%', forecast: '2.8%', surprise: '0%' },
-    { metric: 'US02Yield (21 day SMA)', bias: 'Bearish', actual: '', forecast: '', surprise: '' },
-  ],
-  jobsOverall: 'Very Bearish',
-  jobsMetrics: SPX_DATA.jobsMetrics,
-  targets: [2920.50, 2895.30, 2870.10],
-  sma20: 'Bullish', sma50: 'Bullish', sma100: 'Bullish', sma200: 'Bullish',
-  volatility: 'Medium', avgMove7d: '1.2%', avgMove90d: '0.9%',
-  scoreHistory: [
-    { date: 'Dec 26', score: 2 }, { date: 'Dec 30', score: 1 },
-    { date: 'Jan 3', score: 1 }, { date: 'Jan 7', score: 2 },
-    { date: 'Jan 11', score: 1 }, { date: 'Jan 15', score: 1 },
-    { date: 'Jan 19', score: 0 }, { date: 'Jan 23', score: 1 },
-    { date: 'Jan 27', score: 1 }, { date: 'Jan 31', score: 1 },
-    { date: 'Feb 4', score: 2 }, { date: 'Feb 8', score: 1 },
-  ],
-  newsText: 'Gold continues to benefit from safe-haven demand amid global uncertainty, with central bank buying reaching record levels[1]. The Federal Reserve\'s dovish pivot and potential rate cuts support gold prices as real yields decline[2]. Geopolitical tensions and de-dollarization trends provide additional tailwinds[3].',
-  newsSources: [{ id: 1, label: 'source 1' }, { id: 2, label: 'source 2' }, { id: 3, label: 'source 3' }],
-};
-
-const EUR_DATA: SymbolData = {
-  tpScore: -2, technicalScore: -3, sentimentCotScore: -1, fundamentalsScore: -1,
-  chartTrend: 'Bearish', seasonality: 'Neutral', technicalOverall: 'Bearish',
-  crowdSentiment: 'Crowd sentiment is bearish', crowdSentimentBias: 'Bearish',
-  cotOverall: 'Bearish', cotNetBias: 'Bearish', cotLatestBias: 'Bearish',
-  longPct: 32.10, shortPct: 67.90, weeklyChange: -3.80,
-  economicOverall: 'Bearish',
-  economicMetrics: [
-    { metric: 'GDP Growth QoQ', bias: 'Bearish', actual: '0.1%', forecast: '0.2%', surprise: '-0.10%' },
-    { metric: 'Manufacturing PMIS', bias: 'Bearish', actual: '46.1', forecast: '46.8', surprise: '-0.70' },
-    { metric: 'Services PMIS', bias: 'Bearish', actual: '51.4', forecast: '51.6', surprise: '-0.20' },
-    { metric: 'Retail Sales MoM', bias: 'Bearish', actual: '-0.3%', forecast: '0.2%', surprise: '-0.50%' },
-    { metric: 'Consumer Confidence', bias: 'Bearish', actual: '-15.4', forecast: '-14.2', surprise: '-1.20' },
-  ],
-  inflationOverall: 'Neutral',
-  inflationMetrics: [
-    { metric: 'CPI YoY', bias: 'Neutral', actual: '2.4%', forecast: '2.4%', surprise: '0.0%' },
-    { metric: 'PPI YoY', bias: 'Bearish', actual: '-0.3%', forecast: '-0.1%', surprise: '-0.20%' },
-    { metric: 'PCE YoY', bias: 'Neutral', actual: '2.6%', forecast: '2.6%', surprise: '0.0%' },
-    { metric: 'EU 2Y Yield (SMA)', bias: 'Bearish', actual: '', forecast: '', surprise: '' },
-  ],
-  jobsOverall: 'Bearish',
-  jobsMetrics: [
-    { metric: 'Unemployment Rate', bias: 'Bearish', actual: '6.4%', forecast: '6.3%', surprise: '0.10%' },
-    { metric: 'Employment Change', bias: 'Bearish', actual: '0.2%', forecast: '0.3%', surprise: '-0.10%' },
-    { metric: 'German Unemployment', bias: 'Bearish', actual: '6.1%', forecast: '6.0%', surprise: '0.10%' },
-    { metric: 'French Claims', bias: 'Bearish', actual: '2.89M', forecast: '2.85M', surprise: '40k' },
-    { metric: 'Job Vacancies', bias: 'Bearish', actual: '2.1M', forecast: '2.3M', surprise: '-0.20M' },
-  ],
-  targets: [1.0620, 1.0580, 1.0540],
-  sma20: 'Bearish', sma50: 'Bearish', sma100: 'Bearish', sma200: 'Bearish',
-  volatility: 'Medium', avgMove7d: '0.6%', avgMove90d: '0.5%',
-  scoreHistory: [
-    { date: 'Dec 26', score: 0 }, { date: 'Dec 30', score: -1 },
-    { date: 'Jan 3', score: -1 }, { date: 'Jan 7', score: -2 },
-    { date: 'Jan 11', score: -1 }, { date: 'Jan 15', score: -2 },
-    { date: 'Jan 19', score: -2 }, { date: 'Jan 23', score: -3 },
-    { date: 'Jan 27', score: -2 }, { date: 'Jan 31', score: -2 },
-    { date: 'Feb 4', score: -2 }, { date: 'Feb 8', score: -2 },
-  ],
-  newsText: 'ECB expected to cut rates before Fed, pressuring EUR lower against the dollar[1]. Eurozone manufacturing remains in contraction territory, weighing on growth outlook and EUR sentiment[2]. Technical breakdown below key support reinforces bearish positioning for EURUSD[3].',
-  newsSources: [{ id: 1, label: 'source 1' }, { id: 2, label: 'source 2' }, { id: 3, label: 'source 3' }],
-};
-
-// Generate default data for symbols without custom data
-function generateData(symbol: string, score: number): SymbolData {
-  const b = overallBias(score);
-  const isBear = score < 0;
-  // Simple deterministic hash for stable mock data
-  const hash = symbol.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const seed = (i: number) => ((hash * 31 + i * 17) % 100) / 100;
-  const pickBias = (offset: number): BiasLevel => {
-    const s = score + offset;
-    if (s >= 3) return 'Very Bullish';
-    if (s >= 1) return 'Bullish';
-    if (s > -1) return 'Neutral';
-    if (s > -3) return 'Bearish';
-    return 'Very Bearish';
-  };
-  const tScore = Math.max(-5, Math.min(5, Math.round(score * 0.8)));
-  const sScore = Math.max(-5, Math.min(5, Math.round(score * 0.6)));
-  const fScore = Math.max(-5, Math.min(5, Math.round(score * 0.4)));
-  const dates = ['Dec 26', 'Dec 30', 'Jan 3', 'Jan 7', 'Jan 11', 'Jan 15', 'Jan 19', 'Jan 23', 'Jan 27', 'Jan 31', 'Feb 4', 'Feb 8'];
-  const hist = dates.map((d, i) => ({
-    date: d,
-    score: Math.max(-5, Math.min(5, score + Math.floor(seed(i) * 3) - 1)),
-  }));
-  const mapping = COT_SYMBOL_MAPPINGS[symbol];
-  const basePrice = symbol === 'BTC' ? 98500 : symbol.includes('US10') ? 112.5 :
-    mapping?.assetClass === 'FX' ? 1.25 : mapping?.assetClass === 'Equity Index' ? 5200 : 2500;
-  const lp = isBear ? 38 + seed(0) * 10 : 55 + seed(0) * 10;
-
+function emptySymbolData(): SymbolData {
   return {
-    tpScore: score, technicalScore: tScore, sentimentCotScore: sScore, fundamentalsScore: fScore,
-    chartTrend: pickBias(0), seasonality: pickBias(1), technicalOverall: pickBias(0),
-    crowdSentiment: isBear ? 'Crowd sentiment is bearish' : score === 0 ? 'Crowd sentiment is mixed' : 'Crowd sentiment is bullish',
-    crowdSentimentBias: b,
-    cotOverall: pickBias(0), cotNetBias: pickBias(0), cotLatestBias: pickBias(0),
-    longPct: Math.round(lp * 100) / 100,
-    shortPct: Math.round((100 - lp) * 100) / 100,
-    weeklyChange: Math.round((isBear ? -(1 + seed(1) * 3) : (1 + seed(1) * 3)) * 100) / 100,
-    economicOverall: 'Very Bullish',
-    economicMetrics: SPX_DATA.economicMetrics,
-    inflationOverall: 'Neutral',
-    inflationMetrics: SPX_DATA.inflationMetrics,
-    jobsOverall: 'Very Bearish',
-    jobsMetrics: SPX_DATA.jobsMetrics,
-    targets: [basePrice * 1.02, basePrice, basePrice * 0.98],
-    sma20: pickBias(1), sma50: pickBias(0), sma100: pickBias(-1), sma200: pickBias(-1),
-    volatility: Math.abs(score) >= 3 ? 'High' : Math.abs(score) >= 1 ? 'Medium' : 'Low',
-    avgMove7d: (0.4 + Math.abs(score) * 0.15).toFixed(1) + '%',
-    avgMove90d: (0.3 + Math.abs(score) * 0.1).toFixed(1) + '%',
-    scoreHistory: hist,
-    newsText: `Latest analysis for ${mapping?.displayName || symbol} indicates ${b.toLowerCase()} conditions based on current macro and technical factors. Institutional positioning aligns with the overall ${b.toLowerCase()} bias.`,
-    newsSources: [{ id: 1, label: 'source 1' }],
+    tpScore: 0, technicalScore: 0, sentimentCotScore: 0, fundamentalsScore: 0,
+    chartTrend: 'Neutral', seasonality: 'Neutral', technicalOverall: 'Neutral',
+    crowdSentiment: 'Awaiting data...', crowdSentimentBias: 'Neutral',
+    cotOverall: 'Neutral', cotNetBias: 'Neutral', cotLatestBias: 'Neutral',
+    longPct: 50, shortPct: 50, weeklyChange: 0,
+    economicOverall: 'Neutral', economicMetrics: [],
+    inflationOverall: 'Neutral', inflationMetrics: [],
+    jobsOverall: 'Neutral', jobsMetrics: [],
+    targets: [0, 0, 0],
+    sma20: 'Neutral', sma50: 'Neutral', sma100: 'Neutral', sma200: 'Neutral',
+    volatility: '-', avgMove7d: '-', avgMove90d: '-',
+    scoreHistory: [],
+    newsText: 'Loading live data...',
+    newsSources: [],
   };
 }
 
-const SYMBOL_DATA_MAP: Record<string, SymbolData> = {
-  SPX: SPX_DATA,
-  Gold: GOLD_DATA,
-  EUR: EUR_DATA,
-};
+// ═══════════════════════════════════════════════════════════════════════════════
+// LIVE DATA BRIDGE — Maps scoring engine output → SymbolData
+// ═══════════════════════════════════════════════════════════════════════════════
 
-function getSymbolData(sym: string): SymbolData {
-  if (SYMBOL_DATA_MAP[sym]) return SYMBOL_DATA_MAP[sym];
-  const s = SCORES[sym] ?? 0;
-  return generateData(sym, s);
+// Reverse map: COT symbol → dataService asset symbol
+const COT_TO_DS_SYMBOL: Record<string, string> = {};
+for (const def of ASSET_CATALOG) {
+  if (def.cotSymbol) COT_TO_DS_SYMBOL[def.cotSymbol] = def.asset.symbol;
+}
+
+function directionToBias(direction: string): BiasLevel {
+  switch (direction) {
+    case 'bullish': return 'Bullish';
+    case 'bearish': return 'Bearish';
+    default: return 'Neutral';
+  }
+}
+
+function biasLabelToBias(label: string): BiasLevel {
+  switch (label) {
+    case 'very_bullish': return 'Very Bullish';
+    case 'bullish': return 'Bullish';
+    case 'very_bearish': return 'Very Bearish';
+    case 'bearish': return 'Bearish';
+    default: return 'Neutral';
+  }
+}
+
+function findReading(readings: SignalInput[], key: string): SignalInput | undefined {
+  return readings.find(r => r.metric_key === key);
+}
+
+function fmtMacroVal(val: number | null | undefined, unit: string | null | undefined): string {
+  if (val === null || val === undefined) return '-';
+  const u = unit || '';
+  if (u === '%') return `${val}%`;
+  if (u === 'index') return val.toFixed(1);
+  if (Math.abs(val) >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(val) >= 1_000) return `${(val / 1_000).toFixed(0)}k`;
+  return val.toString();
+}
+
+function fmtSurprise(surprise: number | null | undefined, unit: string | null | undefined): string {
+  if (surprise === null || surprise === undefined) return '-';
+  const sign = surprise > 0 ? '+' : '';
+  const u = unit || '';
+  if (u === '%') return `${sign}${surprise}%`;
+  if (u === 'index') return `${sign}${surprise.toFixed(1)}`;
+  if (Math.abs(surprise) >= 1_000_000) return `${sign}${(surprise / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(surprise) >= 1_000) return `${sign}${(surprise / 1_000).toFixed(0)}k`;
+  return `${sign}${surprise}`;
+}
+
+function buildMetricRows(
+  readings: SignalInput[],
+  macroReleases: MacroRelease[],
+  category: string,
+): MetricRow[] {
+  const filtered = macroReleases.filter(r => r.category === category);
+  return filtered.map(r => {
+    // Find matching signal to get bias
+    const signal = readings.find(s => s.metric_key === r.indicator_key);
+    const bias: BiasLevel = signal ? directionToBias(signal.direction) : 'Neutral';
+    return {
+      metric: r.indicator_name,
+      bias,
+      actual: fmtMacroVal(r.actual, r.unit),
+      forecast: fmtMacroVal(r.forecast, r.unit),
+      surprise: fmtSurprise(r.surprise, r.unit),
+    };
+  });
+}
+
+function smaBias(price: number, sma: number | null): BiasLevel {
+  if (sma === null || sma === 0) return 'Neutral';
+  const pct = ((price - sma) / sma) * 100;
+  if (pct > 3) return 'Very Bullish';
+  if (pct > 0) return 'Bullish';
+  if (pct < -3) return 'Very Bearish';
+  if (pct < 0) return 'Bearish';
+  return 'Neutral';
+}
+
+function deriveSMAs(
+  tech: TechnicalIndicator | null | undefined,
+  mock: SymbolData,
+): { sma20: BiasLevel; sma50: BiasLevel; sma100: BiasLevel; sma200: BiasLevel } {
+  if (!tech || tech.sma_200 === null || tech.price_vs_sma200 === null) {
+    return { sma20: mock.sma20, sma50: mock.sma50, sma100: mock.sma100, sma200: mock.sma200 };
+  }
+  const price = tech.sma_200 * (1 + tech.price_vs_sma200 / 100);
+  return {
+    sma20:  smaBias(price, tech.sma_20),
+    sma50:  smaBias(price, tech.sma_50),
+    sma100: smaBias(price, tech.sma_100),
+    sma200: smaBias(price, tech.sma_200),
+  };
+}
+
+function scorecardToSymbolData(
+  card: AssetScorecard,
+  mock: SymbolData,
+  macroReleases: Record<string, MacroRelease[]>,
+  assetDef: AssetDef,
+  technical?: TechnicalIndicator | null,
+): SymbolData {
+  const { categories, readings } = card;
+
+  // Scale total_score (-10..+10) → tpScore (-5..+5)
+  const tpScore = Math.round(card.total_score / 2);
+
+  // Scale category scores (-2..+2) → sub-scores (-5..+5)
+  const techCat = categories['technical'];
+  const cotCat = categories['cot'];
+  const sentCat = categories['sentiment'];
+  const growthCat = categories['eco_growth'];
+  const inflCat = categories['inflation'];
+  const jobsCat = categories['jobs'];
+  const ratesCat = categories['rates'];
+
+  const technicalScore = Math.round((techCat?.score ?? 0) * 2.5);
+  const cotAvg = ((cotCat?.score ?? 0) + (sentCat?.score ?? 0)) / 2;
+  const sentimentCotScore = Math.round(cotAvg * 2.5);
+  const fundAvg = ((growthCat?.score ?? 0) + (inflCat?.score ?? 0) + (jobsCat?.score ?? 0) + (ratesCat?.score ?? 0)) / 4;
+  const fundamentalsScore = Math.round(fundAvg * 2.5);
+
+  // BiasLevel from directions
+  const technicalOverall = directionToBias(techCat?.direction ?? 'neutral');
+  const cotOverall = directionToBias(cotCat?.direction ?? 'neutral');
+  const crowdSentimentBias = directionToBias(sentCat?.direction ?? 'neutral');
+  const economicOverall = directionToBias(growthCat?.direction ?? 'neutral');
+  const inflationOverall = directionToBias(inflCat?.direction ?? 'neutral');
+  const jobsOverall = directionToBias(jobsCat?.direction ?? 'neutral');
+
+  // Individual signal readings
+  const trendDaily = findReading(readings, 'trend_daily');
+  const seasonalitySignal = findReading(readings, 'seasonality');
+  const cotNetSignal = findReading(readings, 'cot_nc_net');
+  const cotPctlSignal = findReading(readings, 'cot_percentile');
+  const cotChangeSignal = findReading(readings, 'cot_nc_change');
+  const sentimentSignal = findReading(readings, 'retail_sentiment');
+
+  // COT long/short from retail sentiment raw data
+  const longPct = sentimentSignal?.raw_value ?? mock.longPct;
+  const shortPct = sentimentSignal ? (100 - (sentimentSignal.raw_value ?? 50)) : mock.shortPct;
+  const weeklyChange = cotChangeSignal?.raw_value ?? mock.weeklyChange;
+
+  // Crowd sentiment text
+  const crowdText = crowdSentimentBias === 'Bullish' || crowdSentimentBias === 'Very Bullish'
+    ? 'Crowd sentiment is bullish'
+    : crowdSentimentBias === 'Bearish' || crowdSentimentBias === 'Very Bearish'
+    ? 'Crowd sentiment is bearish'
+    : 'Crowd sentiment is mixed';
+
+  // Macro metrics — determine primary economy
+  let econCode = 'US';
+  const { asset, links } = assetDef;
+  if (asset.asset_class === 'fx' && asset.base_currency) {
+    const ccyToEcon: Record<string, string> = {
+      EUR: 'EU', GBP: 'UK', USD: 'US', JPY: 'JP',
+      AUD: 'AU', NZD: 'NZ', CAD: 'CA', CHF: 'CH',
+    };
+    econCode = ccyToEcon[asset.base_currency] ?? 'US';
+  } else {
+    econCode = (asset.metadata as Record<string, string>)?.economy ?? 'US';
+  }
+
+  const econReleases = macroReleases[econCode] || [];
+  const ecoMetrics = buildMetricRows(readings, econReleases, 'growth');
+  const inflMetrics = buildMetricRows(readings, econReleases, 'inflation');
+  const jobMetrics = buildMetricRows(readings, econReleases, 'jobs');
+
+  return {
+    tpScore,
+    technicalScore,
+    sentimentCotScore,
+    fundamentalsScore,
+    chartTrend: trendDaily ? directionToBias(trendDaily.direction) : mock.chartTrend,
+    seasonality: seasonalitySignal ? directionToBias(seasonalitySignal.direction) : mock.seasonality,
+    technicalOverall,
+    crowdSentiment: crowdText,
+    crowdSentimentBias,
+    cotOverall,
+    cotNetBias: cotNetSignal ? directionToBias(cotNetSignal.direction) : mock.cotNetBias,
+    cotLatestBias: cotPctlSignal ? directionToBias(cotPctlSignal.direction) : mock.cotLatestBias,
+    longPct,
+    shortPct,
+    weeklyChange,
+    economicOverall,
+    economicMetrics: ecoMetrics.length > 0 ? ecoMetrics : mock.economicMetrics,
+    inflationOverall,
+    inflationMetrics: inflMetrics.length > 0 ? inflMetrics : mock.inflationMetrics,
+    jobsOverall,
+    jobsMetrics: jobMetrics.length > 0 ? jobMetrics : mock.jobsMetrics,
+    // Technical snapshot — derive SMA biases from live price data
+    targets: mock.targets,
+    ...deriveSMAs(technical, mock),
+    volatility: technical?.volatility != null
+      ? (technical.volatility > 25 ? 'High' : technical.volatility > 12 ? 'Medium' : 'Low')
+      : mock.volatility,
+    avgMove7d: mock.avgMove7d,
+    avgMove90d: mock.avgMove90d,
+    scoreHistory: mock.scoreHistory,
+    newsText: mock.newsText,
+    newsSources: mock.newsSources,
+  };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -556,6 +590,7 @@ export default function AssetProfile() {
   const [searchQuery, setSearchQuery] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const { data: tpData, loading: tpLoading } = useTradePilotData();
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -577,22 +612,60 @@ export default function AssetProfile() {
     return filtered.sort((a, b) => a.localeCompare(b));
   }, [searchQuery]);
 
+  // Live scores from scoring engine (keyed by COT symbol)
+  const liveScores = useMemo((): Record<string, number> => {
+    if (!tpData) return {};
+    const result: Record<string, number> = {};
+    for (const def of ASSET_CATALOG) {
+      if (!def.cotSymbol) continue;
+      const card = tpData.scorecards[def.asset.symbol];
+      if (card) {
+        result[def.cotSymbol] = Math.round(card.total_score / 2);
+      }
+    }
+    return result;
+  }, [tpData]);
+
   const data = useMemo(() => {
-    return getSymbolData(selectedSymbol);
-  }, [selectedSymbol]);
+    const empty = emptySymbolData();
+    if (!tpData) return empty;
+
+    // Map COT symbol → dataService symbol
+    const dsSymbol = COT_TO_DS_SYMBOL[selectedSymbol];
+    if (!dsSymbol) return empty;
+
+    const card = tpData.scorecards[dsSymbol];
+    if (!card) return empty;
+
+    const assetDef = ASSET_CATALOG.find(d => d.asset.symbol === dsSymbol);
+    if (!assetDef) return empty;
+
+    const technical = tpData.technicals?.[dsSymbol] ?? null;
+    return scorecardToSymbolData(card, empty, tpData.macroReleases, assetDef, technical);
+  }, [selectedSymbol, tpData]);
 
   const displayName = COT_SYMBOL_MAPPINGS[selectedSymbol]?.displayName || selectedSymbol;
   const bias = overallBias(data.tpScore);
-  const currentScore = SCORES[selectedSymbol] ?? 0;
+  const currentScore = liveScores[selectedSymbol] ?? 0;
 
   return (
     <div className="h-full overflow-auto" style={{ background: 'var(--tp-l1)' }}>
       {/* ─── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: '1px solid var(--tp-border-subtle)' }}>
         <div className="flex items-center gap-3">
-          <div>
+          <div className="flex items-center gap-2.5">
             <span className="text-[15px]" style={{ fontWeight: 600, color: 'var(--tp-text-1)' }}>Asset Profile</span>
-            <span className="text-[11px] ml-3" style={{ color: 'var(--tp-text-3)' }}>tradepilot.app</span>
+            <span className="text-[11px]" style={{ color: 'var(--tp-text-3)' }}>tradepilot.app</span>
+            <div className="flex items-center gap-1 px-2 py-0.5 rounded-md" style={{ background: 'var(--tp-l2)' }}>
+              {tpLoading ? (
+                <Loader2 className="w-3 h-3 animate-spin" style={{ color: 'var(--tp-text-3)' }} />
+              ) : (
+                <Wifi className="w-3 h-3" style={{ color: 'var(--tp-bullish)' }} />
+              )}
+              <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.05em', color: tpLoading ? 'var(--tp-text-3)' : 'var(--tp-bullish)' }}>
+                {tpLoading ? 'LOADING' : 'LIVE'}
+              </span>
+            </div>
           </div>
         </div>
         <span className="text-[10px] max-w-[480px] text-right leading-tight" style={{ color: 'var(--tp-text-3)' }}>
@@ -657,7 +730,7 @@ export default function AssetProfile() {
                   {/* Symbol options */}
                   <div className="max-h-[240px] overflow-y-auto">
                     {sortedSymbols.map((sym) => {
-                      const s = SCORES[sym] ?? 0;
+                      const s = liveScores[sym] ?? 0;
                       const isSelected = sym === selectedSymbol;
                       return (
                         <div

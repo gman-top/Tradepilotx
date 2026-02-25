@@ -2,16 +2,16 @@
 // TradePilot — Live Data Provider Implementations
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Real data providers that replace mocks when API keys are available:
+// Real data providers — no mocks, no hardcoded data:
 //
 //  CFTCDirectProvider   — CFTC COT data, no key needed (CORS supported)
-//  FREDMacroProvider    — US macro indicators (GDP, CPI, NFP, etc.)
-//  FREDRateProvider     — US Treasury yields + policy rates
+//  FREDMacroProvider    — US + international macro indicators via FRED
+//  FREDRateProvider     — US + international yields & policy rates via FRED
 //  TwelveDataProvider   — FX/metals/crypto OHLC for technical analysis
 //  MyfxbookSentiment    — Retail long/short sentiment
 //
-// Each provider falls back gracefully to mock data on failure.
 // All responses are cached in localStorage with per-provider TTLs.
+// When APIs are unavailable, providers return empty data (no mock fallback).
 //
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -35,14 +35,6 @@ import type {
   QuoteData,
   MacroCalendarEvent,
   ProviderRegistry,
-} from './providers';
-
-import {
-  MockCOTProvider,
-  MockSentimentProvider,
-  MockMacroProvider,
-  MockRateProvider,
-  MockPriceProvider,
 } from './providers';
 
 import { COT_SYMBOL_MAPPINGS } from '../utils/cotMappings';
@@ -270,6 +262,44 @@ const FRED_US_INDICATORS: FredSeries[] = [
   { key: 'interest_rate',     seriesId: 'FEDFUNDS',         units: 'lin', name: 'Fed Funds Rate',        category: 'rates',      unit: '%',    impact: 'high'   },
 ];
 
+// ─── FRED International Macro Indicators (OECD via FRED) ─────────────────────
+// FRED hosts OECD Main Economic Indicators with consistent naming patterns.
+// Country codes: EA=Euro Area, GB=UK, JP=Japan, AU=Australia, NZ=New Zealand, CA=Canada, CH=Switzerland
+const FRED_COUNTRY_CODE: Record<string, string> = {
+  'EU': 'EA', 'UK': 'GB', 'JP': 'JP', 'AU': 'AU', 'NZ': 'NZ', 'CA': 'CA', 'CH': 'CH',
+};
+
+function buildInternationalIndicators(econCode: string): FredSeries[] {
+  const cc = FRED_COUNTRY_CODE[econCode];
+  if (!cc) return [];
+
+  const econName: Record<string, string> = {
+    'EU': 'Eurozone', 'UK': 'UK', 'JP': 'Japan', 'AU': 'Australia',
+    'NZ': 'New Zealand', 'CA': 'Canada', 'CH': 'Switzerland',
+  };
+  const name = econName[econCode] || econCode;
+
+  // Quarterly CPI for AU/NZ (they publish quarterly), monthly for others
+  const cpiFreq = (econCode === 'AU' || econCode === 'NZ') ? 'Q' : 'M';
+  const cpiSuffix = cpiFreq === 'Q' ? 'Q659N' : 'M659N';
+
+  return [
+    { key: 'gdp', seriesId: `NAEXKP01${cc}Q189S`, units: 'pch', name: `${name} GDP (QoQ)`, category: 'growth', unit: '%', impact: 'high' },
+    { key: 'cpi', seriesId: `CPALTT01${cc}${cpiSuffix}`, units: 'lin', name: `${name} CPI (YoY)`, category: 'inflation', unit: '%', impact: 'high' },
+    { key: 'unemployment_rate', seriesId: `LRHUTTTT${cc}M156S`, units: 'lin', name: `${name} Unemployment Rate`, category: 'jobs', unit: '%', impact: 'high', invertSurprise: true },
+  ];
+}
+
+// ─── FRED International Rate/Yield Series ────────────────────────────────────
+function buildInternationalRateSeries(econCode: string): Record<string, string> {
+  const cc = FRED_COUNTRY_CODE[econCode];
+  if (!cc) return {};
+  return {
+    short_term: `IR3TIB01${cc}M156N`,   // 3-month interbank rate (proxy for policy rate)
+    yield_10y:  `IRLTLT01${cc === 'EA' ? 'EZ' : cc}M156N`,  // Long-term govt bond yield (10Y)
+  };
+}
+
 async function fetchFredSeries(seriesId: string, units: string, apiKey: string, limit = 2): Promise<{ latest: number | null; previous: number | null }> {
   const url = new URL(FRED_BASE);
   url.searchParams.set('series_id', seriesId);
@@ -292,15 +322,61 @@ async function fetchFredSeries(seriesId: string, units: string, apiKey: string, 
 
 export class FREDMacroProvider implements IMacroProvider {
   name = 'fred-macro';
-  private mock = new MockMacroProvider();
 
-  async fetchReleases(economyCode: string, category?: string, limit = 20): Promise<ProviderResult<MacroRelease[]>> {
-    // FRED only covers US; delegate other economies to mock
-    if (economyCode !== 'US') {
-      return this.mock.fetchReleases(economyCode, category, limit);
+  private async fetchFredIndicators(indicators: FredSeries[]): Promise<MacroRelease[]> {
+    const now = new Date().toISOString();
+    const releases: MacroRelease[] = [];
+
+    const results = await Promise.allSettled(
+      indicators.map(async (ind) => {
+        const { latest, previous } = await fetchFredSeries(ind.seriesId, ind.units, API_KEYS.fred);
+        if (latest === null) return null;
+
+        const actual   = ind.scale ? Math.round(latest * ind.scale * 10) / 10 : Math.round(latest * 100) / 100;
+        const prev     = previous !== null ? (ind.scale ? Math.round(previous * ind.scale * 10) / 10 : Math.round(previous * 100) / 100) : actual;
+        const forecast = prev; // Use previous as proxy for forecast
+        const surprise = actual - forecast;
+        const beatMiss = Math.abs(surprise) < 0.05
+          ? 'inline'
+          : (ind.invertSurprise ? (surprise < 0 ? 'beat' : 'miss') : (surprise > 0 ? 'beat' : 'miss'));
+
+        return {
+          id: 0,
+          economy_id: 0,
+          indicator_key: ind.key,
+          indicator_name: ind.name,
+          category: ind.category as MacroRelease['category'],
+          release_date: now,
+          actual,
+          forecast,
+          previous: prev,
+          surprise: Math.round(surprise * 100) / 100,
+          surprise_pct: forecast !== 0 ? Math.round((surprise / Math.abs(forecast)) * 10000) / 100 : 0,
+          beat_miss: beatMiss as 'beat' | 'miss' | 'inline',
+          impact: ind.impact,
+          unit: ind.unit,
+          revision: null,
+          source: 'FRED',
+          fetched_at: now,
+        } satisfies MacroRelease;
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'fulfilled' && result.value) {
+        releases.push(result.value);
+      }
     }
 
-    const cacheKey = `fred_releases_US`;
+    return releases;
+  }
+
+  async fetchReleases(economyCode: string, category?: string, limit = 20): Promise<ProviderResult<MacroRelease[]>> {
+    if (!API_KEYS.fred) {
+      return { ok: false, data: [], source: this.name, fetched_at: new Date().toISOString(), warnings: ['No FRED API key'] };
+    }
+
+    const cacheKey = `fred_releases_${economyCode}`;
     const cached = lsGet<MacroRelease[]>(cacheKey, CACHE_TTL.macro);
     if (cached) {
       let data = cached;
@@ -309,77 +385,30 @@ export class FREDMacroProvider implements IMacroProvider {
     }
 
     try {
-      const now = new Date().toISOString();
-      const releases: MacroRelease[] = [];
+      // Select indicators based on economy
+      const indicators = economyCode === 'US'
+        ? FRED_US_INDICATORS
+        : buildInternationalIndicators(economyCode);
 
-      // Fetch all US indicators in parallel
-      const results = await Promise.allSettled(
-        FRED_US_INDICATORS.map(async (ind) => {
-          const { latest, previous } = await fetchFredSeries(ind.seriesId, ind.units, API_KEYS.fred);
-          if (latest === null) return null;
-
-          const actual   = ind.scale ? Math.round(latest * ind.scale * 10) / 10 : Math.round(latest * 100) / 100;
-          const prev     = previous !== null ? (ind.scale ? Math.round(previous * ind.scale * 10) / 10 : Math.round(previous * 100) / 100) : actual;
-          const forecast = prev; // Use previous as proxy for forecast
-          const surprise = actual - forecast;
-          const beatMiss = Math.abs(surprise) < 0.05
-            ? 'inline'
-            : (ind.invertSurprise ? (surprise < 0 ? 'beat' : 'miss') : (surprise > 0 ? 'beat' : 'miss'));
-
-          return {
-            id: 0,
-            economy_id: 0,
-            indicator_key: ind.key,
-            indicator_name: ind.name,
-            category: ind.category as MacroRelease['category'],
-            release_date: now,
-            actual,
-            forecast,
-            previous: prev,
-            surprise: Math.round(surprise * 100) / 100,
-            surprise_pct: forecast !== 0 ? Math.round((surprise / Math.abs(forecast)) * 10000) / 100 : 0,
-            beat_miss: beatMiss as 'beat' | 'miss' | 'inline',
-            impact: ind.impact,
-            unit: ind.unit,
-            revision: null,
-            source: 'FRED',
-            fetched_at: now,
-          } satisfies MacroRelease;
-        })
-      );
-
-      for (const result of results) {
-        if (result.status === 'fulfilled' && result.value) {
-          releases.push(result.value);
-        }
+      if (indicators.length === 0) {
+        return { ok: false, data: [], source: this.name, fetched_at: new Date().toISOString(), warnings: [`No FRED series mapped for ${economyCode}`] };
       }
+
+      const releases = await this.fetchFredIndicators(indicators);
 
       if (releases.length === 0) {
-        console.warn('[FRED] No data returned, falling back to mock');
-        return this.mock.fetchReleases(economyCode, category, limit);
-      }
-
-      // Supplement with mock data for US indicators FRED doesn't cover
-      // (ISM PMI Manufacturing/Services, ADP — these are proprietary, not on FRED)
-      const fredKeys = new Set(releases.map(r => r.indicator_key));
-      const NON_FRED_US_KEYS = ['pmi_manufacturing', 'pmi_services', 'adp'];
-      for (const missingKey of NON_FRED_US_KEYS) {
-        if (!fredKeys.has(missingKey)) {
-          const mockResult = await this.mock.fetchIndicator('US', missingKey);
-          if (mockResult.data) {
-            releases.push({ ...mockResult.data, source: 'mock-supplement' });
-          }
-        }
+        console.warn(`[FRED] No data returned for ${economyCode}`);
+        return { ok: false, data: [], source: this.name, fetched_at: new Date().toISOString() };
       }
 
       lsSet(cacheKey, releases);
 
       let data = releases;
       if (category) data = data.filter(r => r.category === category);
-      return { ok: true, data: data.slice(0, limit), source: this.name, fetched_at: now };
+      return { ok: true, data: data.slice(0, limit), source: this.name, fetched_at: new Date().toISOString() };
     } catch (err) {
-      console.warn('[FRED] fetchReleases failed, using mock:', err);
-      return this.mock.fetchReleases(economyCode, category, limit);
+      console.warn(`[FRED] fetchReleases failed for ${economyCode}:`, err);
+      return { ok: false, data: [], source: this.name, fetched_at: new Date().toISOString() };
     }
   }
 
@@ -406,7 +435,7 @@ export class FREDMacroProvider implements IMacroProvider {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// FRED RATE PROVIDER — US Treasury yields + updated non-US rates
+// FRED RATE PROVIDER — US + international yields & policy rates via FRED
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const FRED_YIELD_SERIES: Record<string, string> = {
@@ -417,33 +446,23 @@ const FRED_YIELD_SERIES: Record<string, string> = {
   yield_30y:   'DGS30',
 };
 
-// Updated central bank rates and government bond yields — February 2026
-// Source: ECB (Feb 5 decision), BoE (Feb 4 decision), BoJ (Jan 23 hold), RBA (Feb 3 hike),
-//         RBNZ (Feb hold), BoC (Jan 28 hold), SNB (held at 0% since Jun 2025)
-const NON_US_RATES_2025: Record<string, { policy: number; y2: number; y5: number; y10: number; y30: number }> = {
-  'EU': { policy: 2.15, y2: 2.09, y5: 2.30, y10: 2.70, y30: 2.90 },  // ECB held at MRO 2.15% / deposit 2.00% (5th consecutive hold; 8 total cuts from 4%)
-  'UK': { policy: 3.75, y2: 3.57, y5: 3.90, y10: 4.32, y30: 5.00 },  // BoE held at 3.75% (5-4 vote Feb 2026; -150bps since Aug 2024)
-  'JP': { policy: 0.75, y2: 1.22, y5: 1.60, y10: 2.10, y30: 2.90 },  // BoJ held at 0.75% (Jan 2026; hiked from 0.50% Dec 2025)
-  'AU': { policy: 3.85, y2: 3.70, y5: 4.00, y10: 4.45, y30: 4.80 },  // RBA hiked +25bps to 3.85% (Feb 3, 2026; first hike since 2023)
-  'NZ': { policy: 2.25, y2: 2.15, y5: 3.00, y10: 3.75, y30: 4.20 },  // RBNZ held at 2.25% (Feb 2026; deep cutting cycle from 5.50%)
-  'CA': { policy: 2.25, y2: 2.50, y5: 2.80, y10: 3.20, y30: 3.50 },  // BoC held at 2.25% (Jan 28, 2026; -225bps from peak)
-  'CH': { policy: 0.00, y2: 0.25, y5: 0.40, y10: 0.65, y30: 0.90 },  // SNB at 0% (cut to 0% Jun 2025; expected stable all 2026)
-};
-
 export class FREDRateProvider implements IRateProvider {
   name = 'fred-rates';
-  private mock: { policy: number; y2: number; y5: number; y10: number; y30: number } | null = null;
 
   async fetchRates(economyCodes: string[]): Promise<ProviderResult<Record<string, InterestRate>>> {
     const cacheKey = `fred_rates_${economyCodes.sort().join(',')}`;
     const cached = lsGet<Record<string, InterestRate>>(cacheKey, CACHE_TTL.rates);
     if (cached) return { ok: true, data: cached, source: this.name, fetched_at: new Date().toISOString() };
 
+    if (!API_KEYS.fred) {
+      return { ok: false, data: {}, source: this.name, fetched_at: new Date().toISOString(), warnings: ['No FRED API key'] };
+    }
+
     const results: Record<string, InterestRate> = {};
     const now = new Date().toISOString();
 
     // Fetch US rates from FRED
-    if (economyCodes.includes('US') && API_KEYS.fred) {
+    if (economyCodes.includes('US')) {
       try {
         const yieldFetches = await Promise.allSettled(
           Object.entries(FRED_YIELD_SERIES).map(async ([key, seriesId]) => {
@@ -463,52 +482,65 @@ export class FREDRateProvider implements IRateProvider {
           results['US'] = {
             economy_id: 0,
             timestamp: now,
-            policy_rate: usRates.policy_rate ?? 3.63,  // Fed: 3.50-3.75% range (Feb 2026)
-            yield_2y:    usRates.yield_2y   ?? 4.00,
-            yield_5y:    usRates.yield_5y   ?? 4.20,
-            yield_10y:   usRates.yield_10y  ?? 4.50,
-            yield_30y:   usRates.yield_30y  ?? 4.75,
-            spread_2_10: (usRates.yield_10y ?? 4.50) - (usRates.yield_2y ?? 4.00),
+            policy_rate: usRates.policy_rate ?? null,
+            yield_2y:    usRates.yield_2y   ?? null,
+            yield_5y:    usRates.yield_5y   ?? null,
+            yield_10y:   usRates.yield_10y  ?? null,
+            yield_30y:   usRates.yield_30y  ?? null,
+            spread_2_10: (usRates.yield_10y != null && usRates.yield_2y != null)
+              ? usRates.yield_10y - usRates.yield_2y : null,
             real_rate_10y: null,
             source: 'FRED',
           };
         }
       } catch (err) {
-        console.warn('[FRED] Rates fetch failed:', err);
+        console.warn('[FRED] US rates fetch failed:', err);
       }
     }
 
-    // Non-US economies: use updated 2025 rates
-    for (const code of economyCodes) {
-      if (code === 'US' && results['US']) continue;
-      if (code === 'US') {
-        // FRED failed, use Feb 2026 fallback (Fed at 3.50-3.75% range; midpoint ~3.63%)
-        results['US'] = {
-          economy_id: 0, timestamp: now,
-          policy_rate: 3.63, yield_2y: 4.00, yield_5y: 4.20, yield_10y: 4.50, yield_30y: 4.75,
-          spread_2_10: 0.50, real_rate_10y: null, source: 'fallback',
-        };
-        continue;
-      }
+    // Non-US economies: fetch from FRED international series (OECD data)
+    const nonUS = economyCodes.filter(c => c !== 'US');
+    if (nonUS.length > 0) {
+      const intlFetches = nonUS.map(async (code) => {
+        const series = buildInternationalRateSeries(code);
+        if (Object.keys(series).length === 0) return;
 
-      const r = NON_US_RATES_2025[code];
-      if (!r) continue;
-      results[code] = {
-        economy_id: 0,
-        timestamp: now,
-        policy_rate: r.policy,
-        yield_2y:    r.y2,
-        yield_5y:    r.y5,
-        yield_10y:   r.y10,
-        yield_30y:   r.y30,
-        spread_2_10: r.y10 - r.y2,
-        real_rate_10y: null,
-        source: 'updated-2025',
-      };
+        try {
+          const [shortTermResult, yield10yResult] = await Promise.allSettled([
+            series.short_term ? fetchFredSeries(series.short_term, 'lin', API_KEYS.fred, 1) : Promise.resolve({ latest: null, previous: null }),
+            series.yield_10y  ? fetchFredSeries(series.yield_10y,  'lin', API_KEYS.fred, 1) : Promise.resolve({ latest: null, previous: null }),
+          ]);
+
+          const shortTerm = shortTermResult.status === 'fulfilled' ? shortTermResult.value.latest : null;
+          const yield10y  = yield10yResult.status  === 'fulfilled' ? yield10yResult.value.latest  : null;
+
+          // Only add if we got at least one data point
+          if (shortTerm !== null || yield10y !== null) {
+            results[code] = {
+              economy_id: 0,
+              timestamp: now,
+              policy_rate: shortTerm,    // 3-month interbank rate ≈ policy rate proxy
+              yield_2y:    null,          // FRED doesn't have 2Y for most non-US
+              yield_5y:    null,
+              yield_10y:   yield10y,
+              yield_30y:   null,
+              spread_2_10: null,
+              real_rate_10y: null,
+              source: 'FRED-OECD',
+            };
+          }
+        } catch (err) {
+          console.warn(`[FRED] International rates failed for ${code}:`, err);
+        }
+      });
+
+      await Promise.allSettled(intlFetches);
     }
 
-    lsSet(cacheKey, results);
-    return { ok: true, data: results, source: this.name, fetched_at: now };
+    if (Object.keys(results).length > 0) {
+      lsSet(cacheKey, results);
+    }
+    return { ok: Object.keys(results).length > 0, data: results, source: this.name, fetched_at: now };
   }
 
   async fetchHistory(_economyCode: string, _months: number): Promise<ProviderResult<InterestRate[]>> {
@@ -516,7 +548,7 @@ export class FREDRateProvider implements IRateProvider {
   }
 
   async healthCheck(): Promise<boolean> {
-    return true; // Non-US always works; US requires FRED key
+    return !!API_KEYS.fred;
   }
 }
 
@@ -636,15 +668,20 @@ async function fetchTDBatch(symbols: string[], outputsize: number, apiKey: strin
 
 export class TwelveDataProvider implements IPriceProvider {
   name = 'twelvedata';
-  private mock = new MockPriceProvider();
+
+  private emptyOHLC(): ProviderResult<PriceOHLC[]> {
+    return { ok: false, data: [], source: this.name, fetched_at: new Date().toISOString(), warnings: ['No data available'] };
+  }
+
+  private emptyQuote(symbol: string): ProviderResult<QuoteData> {
+    return { ok: false, data: { symbol, bid: 0, ask: 0, last: 0, timestamp: new Date().toISOString() }, source: this.name, fetched_at: new Date().toISOString() };
+  }
 
   async fetchOHLC(symbol: string, _timeframe: string, bars: number): Promise<ProviderResult<PriceOHLC[]>> {
-    if (!API_KEYS.twelveData) {
-      return this.mock.fetchOHLC(symbol, '1d', bars);
-    }
+    if (!API_KEYS.twelveData) return this.emptyOHLC();
 
     const tdSymbol = TD_SYMBOL_MAP[symbol];
-    if (!tdSymbol) return this.mock.fetchOHLC(symbol, '1d', bars);
+    if (!tdSymbol) return this.emptyOHLC();
 
     const cacheKey = `td_ohlc_${symbol}_${bars}`;
     const cached = lsGet<PriceOHLC[]>(cacheKey, CACHE_TTL.price);
@@ -654,7 +691,7 @@ export class TwelveDataProvider implements IPriceProvider {
       const batchData = await fetchTDBatch([tdSymbol], Math.min(bars, 500), API_KEYS.twelveData);
       const bars_data = batchData[tdSymbol] || [];
 
-      if (bars_data.length === 0) return this.mock.fetchOHLC(symbol, '1d', bars);
+      if (bars_data.length === 0) return this.emptyOHLC();
 
       // TwelveData returns newest first — reverse to chronological
       const chronological = [...bars_data].reverse();
@@ -673,15 +710,15 @@ export class TwelveDataProvider implements IPriceProvider {
       return { ok: true, data: ohlc, source: this.name, fetched_at: new Date().toISOString() };
     } catch (err) {
       console.warn(`[TwelveData] fetchOHLC failed for ${symbol}:`, err);
-      return this.mock.fetchOHLC(symbol, '1d', bars);
+      return this.emptyOHLC();
     }
   }
 
   async fetchQuote(symbol: string): Promise<ProviderResult<QuoteData>> {
-    if (!API_KEYS.twelveData) return this.mock.fetchQuote(symbol);
+    if (!API_KEYS.twelveData) return this.emptyQuote(symbol);
 
     const tdSymbol = TD_SYMBOL_MAP[symbol];
-    if (!tdSymbol) return this.mock.fetchQuote(symbol);
+    if (!tdSymbol) return this.emptyQuote(symbol);
 
     try {
       const url = new URL(`${TWELVEDATA_BASE}/quote`);
@@ -709,7 +746,7 @@ export class TwelveDataProvider implements IPriceProvider {
       };
     } catch (err) {
       console.warn(`[TwelveData] fetchQuote failed for ${symbol}:`, err);
-      return this.mock.fetchQuote(symbol);
+      return this.emptyQuote(symbol);
     }
   }
 
@@ -823,7 +860,7 @@ export function computeTechnicals(closes: number[]): {
 // MYFXBOOK SENTIMENT PROVIDER — Retail positioning data
 // ═══════════════════════════════════════════════════════════════════════════════
 // Public endpoint (no auth required for community outlook summary).
-// Falls back to MockSentimentProvider if API is unavailable.
+// Returns empty data if API is unavailable — no mock fallback.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Myfxbook symbol mapping (they use different symbol format)
@@ -838,7 +875,6 @@ const MYFXBOOK_SYMBOLS: Record<string, string> = {
 
 export class MyfxbookSentimentProvider implements ISentimentProvider {
   name = 'myfxbook-sentiment';
-  private mock = new MockSentimentProvider();
 
   async fetchLatest(symbols: string[]): Promise<ProviderResult<Record<string, RetailSentiment>>> {
     const cacheKey = `myfxbook_latest`;
@@ -905,13 +941,13 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
       }
       throw new Error('myfxbook: no symbols parsed');
     } catch (err) {
-      console.warn('[Myfxbook] Sentiment fetch failed, using mock:', err);
-      return this.mock.fetchLatest(symbols);
+      console.warn('[Myfxbook] Sentiment fetch failed:', err);
+      return { ok: false, data: {}, source: this.name, fetched_at: new Date().toISOString() };
     }
   }
 
-  async fetchHistory(symbol: string, hours: number): Promise<ProviderResult<RetailSentiment[]>> {
-    return this.mock.fetchHistory(symbol, hours);
+  async fetchHistory(_symbol: string, _hours: number): Promise<ProviderResult<RetailSentiment[]>> {
+    return { ok: false, data: [], source: this.name, fetched_at: new Date().toISOString() };
   }
 
   async healthCheck(): Promise<boolean> {
@@ -938,27 +974,29 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
 /**
  * Creates the live provider registry.
  *
- * Provider selection logic:
- *  - COT:       Always CFTCDirectProvider (no key needed)
- *  - Sentiment: MyfxbookSentimentProvider (falls back to mock internally)
- *  - Macro:     FREDMacroProvider if FRED key set, else MockMacroProvider
- *  - Rates:     FREDRateProvider always (uses FRED for US, updated mock for others)
- *  - Price:     TwelveDataProvider if key set, else MockPriceProvider
+ * All providers use real data sources — no mock fallbacks.
+ * When API keys aren't set, providers return empty data gracefully.
+ *
+ *  - COT:       CFTCDirectProvider (no key needed)
+ *  - Sentiment: MyfxbookSentimentProvider (no key needed)
+ *  - Macro:     FREDMacroProvider — US + international via FRED (requires FRED key)
+ *  - Rates:     FREDRateProvider — US + international via FRED (requires FRED key)
+ *  - Price:     TwelveDataProvider — OHLC for technicals (requires TwelveData key)
  */
 export function createLiveRegistry(): ProviderRegistry {
   console.log('[TradePilot] Initializing live providers:', {
     cot: 'CFTC Direct (no key needed)',
-    macro: API_KEYS.fred ? `FRED (key: ${API_KEYS.fred.slice(0, 4)}***)` : 'Mock (no FRED key)',
-    rates: 'FRED/Updated-2025',
-    price: API_KEYS.twelveData ? `TwelveData (key: ${API_KEYS.twelveData.slice(0, 4)}***)` : 'Mock (no TwelveData key)',
-    sentiment: 'Myfxbook → Mock fallback',
+    macro: API_KEYS.fred ? `FRED (key: ${API_KEYS.fred.slice(0, 4)}***)` : 'FRED (no key — macro unavailable)',
+    rates: API_KEYS.fred ? `FRED (key: ${API_KEYS.fred.slice(0, 4)}***)` : 'FRED (no key — rates unavailable)',
+    price: API_KEYS.twelveData ? `TwelveData (key: ${API_KEYS.twelveData.slice(0, 4)}***)` : 'TwelveData (no key — prices unavailable)',
+    sentiment: 'Myfxbook (no key needed)',
   });
 
   return {
     cot:       new CFTCDirectProvider(),
     sentiment: new MyfxbookSentimentProvider(),
-    macro:     API_KEYS.fred ? new FREDMacroProvider() : new MockMacroProvider(),
+    macro:     new FREDMacroProvider(),
     rates:     new FREDRateProvider(),
-    price:     API_KEYS.twelveData ? new TwelveDataProvider() : new MockPriceProvider(),
+    price:     new TwelveDataProvider(),
   };
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Shield, Star, Bell, Monitor, LogOut, Check, X, Wifi, Loader2, Database, Eye, EyeOff } from 'lucide-react';
+import { User, Shield, Star, Bell, Monitor, LogOut, Check, X, Wifi, Loader2, Database, Eye, EyeOff, WifiOff } from 'lucide-react';
 import { useAuth, supabase } from '../AuthContext';
 import { PROVIDERS_ENABLED } from '../../engine/config';
 import { useTradePilotData } from '../../engine/dataService';
@@ -195,28 +195,6 @@ export default function AccountPage() {
                 checked={user.settings.compactMode}
                 onChange={v => { updateUser({ settings: { ...user.settings, compactMode: v } }); showSaved(); }}
               />
-              <div className="flex items-center justify-between">
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: C.t1 }}>Data source</div>
-                  <div style={{ fontSize: 11, color: C.t3 }}>Fallback mode for COT data</div>
-                </div>
-                <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.borderSubtle}` }}>
-                  {(['live', 'mock'] as const).map(opt => (
-                    <button
-                      key={opt}
-                      onClick={() => { updateUser({ settings: { ...user.settings, dataSource: opt } }); showSaved(); }}
-                      className="px-3 py-1.5 transition-colors"
-                      style={{
-                        fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em',
-                        background: user.settings.dataSource === opt ? 'var(--tp-accent-muted)' : 'transparent',
-                        color: user.settings.dataSource === opt ? C.accent : C.t3,
-                      }}
-                    >
-                      {opt}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </SettingsSection>
 
@@ -440,20 +418,20 @@ function SettingsSection({ icon: Icon, title, description, children }: {
 function DataSourcesPanel() {
   const { data, loading } = useTradePilotData();
 
-  const sources: { name: string; status: 'live' | 'mock' | 'loading'; detail: string }[] = [
+  const sources: { name: string; status: 'live' | 'unavailable' | 'loading'; detail: string }[] = [
     {
       name: 'COT (CFTC)',
       status: loading ? 'loading' : 'live',
       detail: 'CFTC SODA API — no key required',
     },
     {
-      name: 'US Macro (FRED)',
-      status: loading ? 'loading' : PROVIDERS_ENABLED.fred ? 'live' : 'mock',
-      detail: PROVIDERS_ENABLED.fred ? 'FRED API connected' : 'Set VITE_FRED_API_KEY in .env',
+      name: 'Macro (FRED)',
+      status: loading ? 'loading' : PROVIDERS_ENABLED.fred ? 'live' : 'unavailable',
+      detail: PROVIDERS_ENABLED.fred ? 'FRED API connected (US + international)' : 'Set VITE_FRED_API_KEY in .env',
     },
     {
       name: 'Price & Technicals',
-      status: loading ? 'loading' : PROVIDERS_ENABLED.twelveData ? 'live' : 'mock',
+      status: loading ? 'loading' : PROVIDERS_ENABLED.twelveData ? 'live' : 'unavailable',
       detail: PROVIDERS_ENABLED.twelveData ? 'TwelveData API connected' : 'Set VITE_TWELVE_DATA_API_KEY in .env',
     },
     {
@@ -463,12 +441,12 @@ function DataSourcesPanel() {
     },
     {
       name: 'Interest Rates',
-      status: loading ? 'loading' : 'live',
-      detail: 'FRED (US) + Updated 2025 data (non-US)',
+      status: loading ? 'loading' : PROVIDERS_ENABLED.fred ? 'live' : 'unavailable',
+      detail: PROVIDERS_ENABLED.fred ? 'FRED API (US + international yields)' : 'Set VITE_FRED_API_KEY in .env',
     },
     {
       name: 'Scoring Engine',
-      status: loading ? 'loading' : data ? 'live' : 'mock',
+      status: loading ? 'loading' : data ? 'live' : 'unavailable',
       detail: data ? `${Object.keys(data.scorecards).length} assets scored` : 'Waiting for data...',
     },
   ];
@@ -520,7 +498,7 @@ function DataSourcesPanel() {
                   : 'rgba(248,113,113,0.1)',
               }}
             >
-              {src.status === 'loading' ? 'LOADING' : src.status === 'live' ? 'LIVE' : 'MOCK'}
+              {src.status === 'loading' ? 'LOADING' : src.status === 'live' ? 'LIVE' : 'N/A'}
             </span>
           </div>
         ))}

@@ -23,7 +23,7 @@ export interface User {
   settings: {
     defaultPage: string;
     compactMode: boolean;
-    dataSource: 'live' | 'mock';
+    dataSource: 'live';
     notifications: {
       weeklyCot: boolean;
       biasChanges: boolean;

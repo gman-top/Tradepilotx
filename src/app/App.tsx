@@ -78,9 +78,6 @@ function AppShell() {
     );
   }
 
-  // If not logged in, show auth page
-  if (!user) return <AuthPage />;
-
   const renderPage = () => {
     switch (activePage) {
       case 'overview': return <Overview />;
@@ -96,9 +93,9 @@ function AppShell() {
 
   const isFullWidth = FULL_WIDTH_PAGES.includes(activePage);
 
-  const initials = user.name
+  const initials = (user?.name ?? 'T')
     .split(' ')
-    .map(w => w[0])
+    .map((w: string) => w[0])
     .join('')
     .toUpperCase()
     .slice(0, 2);
@@ -345,10 +342,10 @@ function AppShell() {
                 <>
                   <div className="flex-1 min-w-0 text-left">
                     <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--tp-text-1)', lineHeight: 1.2 }} className="truncate">
-                      {user.name}
+                      {user?.name ?? 'Guest'}
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--tp-text-3)' }} className="truncate">
-                      {user.plan.charAt(0).toUpperCase() + user.plan.slice(1)} plan
+                      {user ? user.plan.charAt(0).toUpperCase() + user.plan.slice(1) + ' plan' : ''}
                     </div>
                   </div>
                   <ChevronDown
@@ -376,8 +373,8 @@ function AppShell() {
               >
                 {/* User info header */}
                 <div className="px-3.5 py-3" style={{ borderBottom: '1px solid var(--tp-border-subtle)' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tp-text-1)' }}>{user.name}</div>
-                  <div style={{ fontSize: 11, color: 'var(--tp-text-3)' }}>{user.email}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--tp-text-1)' }}>{user?.name ?? 'Guest'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--tp-text-3)' }}>{user?.email ?? ''}</div>
                 </div>
 
                 <div className="py-1">

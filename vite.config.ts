@@ -30,4 +30,21 @@ export default defineConfig({
       },
     },
   },
+
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // React core — changes rarely, cached aggressively
+          'vendor-react': ['react', 'react-dom'],
+          // Supabase auth client
+          'vendor-supabase': ['@supabase/supabase-js'],
+          // Recharts — heavy charting library
+          'vendor-recharts': ['recharts'],
+          // Lucide icons
+          'vendor-lucide': ['lucide-react'],
+        },
+      },
+    },
+  },
 })

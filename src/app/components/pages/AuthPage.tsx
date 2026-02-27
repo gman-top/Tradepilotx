@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, ArrowRight, Loader2, ArrowLeft, Check } from 'lucide-react';
 import { useAuth, supabase } from '../AuthContext';
 
@@ -38,6 +38,32 @@ export default function AuthPage() {
   const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<'google' | 'discord' | null>(null);
+
+  // Detect OAuth error returned in URL (e.g. from Supabase or Google)
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const oauthError =
+      searchParams.get('error_description') ||
+      hashParams.get('error_description') ||
+      searchParams.get('error') ||
+      hashParams.get('error');
+    if (oauthError) {
+      setError(`Sign-in failed: ${decodeURIComponent(oauthError.replace(/\+/g, ' '))}`);
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    // If Supabase already has a session but auth context hasn't caught it yet
+    // (race condition on first render), wait for onAuthStateChange to fire.
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        // Session exists — auth context will update via onAuthStateChange shortly.
+        // Show a transitional message so the user doesn't see a flickering login page.
+        setInfo('Signing you in…');
+      }
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

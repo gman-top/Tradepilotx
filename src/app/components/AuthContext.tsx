@@ -113,23 +113,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Initialize: restore session from Supabase
   useEffect(() => {
     let mounted = true;
-    // With PKCE flow, Google redirects back with ?code= in the URL.
-    // getSession() returns null before the code exchange finishes — if we
-    // setIsLoading(false) immediately, the app renders !user and shows the
-    // login page, discarding the ?code= before onAuthStateChange can fire.
-    // Fix: if a PKCE code is present, keep loading until onAuthStateChange fires.
-    const hasPkceCode = window.location.search.includes('code=');
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        const prefs = loadPrefs(session.user.id);
-        setUser(buildUser(session.user, prefs));
-      }
-      if (!hasPkceCode) setIsLoading(false);
-    });
-
-    // Listen for auth state changes (OAuth callbacks, token refresh, password recovery, etc.)
+    // Rely solely on onAuthStateChange for the loading state.
+    // Supabase v2 always fires INITIAL_SESSION after full initialization
+    // (including PKCE code exchange), so this is race-condition-free.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
 

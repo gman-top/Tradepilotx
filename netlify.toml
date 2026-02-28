@@ -2,6 +2,12 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  VITE_FRED_API_KEY = "4b06e4f0318a33951b64578fab25a8c8"
+  VITE_TWELVE_DATA_API_KEY = "bad8fef0f20b4c0bbabb95dc8ecaeef1"
+  VITE_SUPABASE_URL = "https://parvvhhqwbgetsntipsr.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhcnZ2aGhxd2JnZXRzbnRpcHNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5MjMxOTYsImV4cCI6MjA4NzQ5OTE5Nn0.r2f7NL_zymWUXus8UqO7PtcdD9Nsg0UPEcLt9hj9iYg"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

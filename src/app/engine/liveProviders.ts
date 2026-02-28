@@ -890,16 +890,12 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
     }
 
     try {
-      // Myfxbook community outlook:
-      //   dev  → Vite proxy (/api/myfxbook) to bypass CORS
-      //   prod → Supabase Edge Function proxy (bypasses CORS server-side)
+      // Myfxbook serves Access-Control-Allow-Origin: * so we can call it directly.
+      // Dev uses the Vite proxy to avoid cookie/redirect quirks during development.
       const myfxbookUrl = import.meta.env.DEV
         ? '/api/myfxbook/get-community-outlook.json'
-        : `${SUPABASE_CONFIG.url}/functions/v1/make-server-d198f9ee/sentiment/myfxbook`;
-      const res = await fetch(myfxbookUrl, {
-        headers: import.meta.env.DEV ? {} : { apikey: SUPABASE_CONFIG.anonKey },
-        signal: AbortSignal.timeout(8000),
-      });
+        : 'https://www.myfxbook.com/api/get-community-outlook.json';
+      const res = await fetch(myfxbookUrl, { signal: AbortSignal.timeout(8000) });
 
       if (!res.ok) throw new Error(`myfxbook ${res.status}`);
       const json = await res.json();
@@ -954,11 +950,8 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
     try {
       const url = import.meta.env.DEV
         ? '/api/myfxbook/get-community-outlook.json'
-        : `${SUPABASE_CONFIG.url}/functions/v1/make-server-d198f9ee/sentiment/myfxbook`;
-      const res = await fetch(url, {
-        headers: import.meta.env.DEV ? {} : { apikey: SUPABASE_CONFIG.anonKey },
-        signal: AbortSignal.timeout(5000),
-      });
+        : 'https://www.myfxbook.com/api/get-community-outlook.json';
+      const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       return res.ok;
     } catch {
       return false;

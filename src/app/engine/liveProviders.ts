@@ -232,7 +232,11 @@ export class CFTCDirectProvider implements ICOTProvider {
 // Non-US economies fall back to MockMacroProvider (updated 2025 data).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations';
+// In production, use the Netlify serverless proxy to avoid CORS/403 from FRED.
+// In dev, call FRED directly (or configure a Vite proxy if needed).
+const FRED_BASE = import.meta.env.DEV
+  ? 'https://api.stlouisfed.org/fred/series/observations'
+  : '/.netlify/functions/fred';
 
 interface FredSeries {
   key: string;
@@ -301,9 +305,12 @@ function buildInternationalRateSeries(econCode: string): Record<string, string> 
 }
 
 async function fetchFredSeries(seriesId: string, units: string, apiKey: string, limit = 2): Promise<{ latest: number | null; previous: number | null }> {
-  const url = new URL(FRED_BASE);
+  // FRED_BASE is a relative path in production (Netlify proxy), absolute in dev.
+  const base = FRED_BASE.startsWith('http') ? FRED_BASE : `${window.location.origin}${FRED_BASE}`;
+  const url = new URL(base);
   url.searchParams.set('series_id', seriesId);
-  url.searchParams.set('api_key', apiKey);
+  // Proxy handles the API key server-side in production; pass it directly in dev.
+  if (import.meta.env.DEV) url.searchParams.set('api_key', apiKey);
   url.searchParams.set('units', units);
   url.searchParams.set('sort_order', 'desc');
   url.searchParams.set('limit', String(limit));
@@ -890,11 +897,11 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
     }
 
     try {
-      // Myfxbook serves Access-Control-Allow-Origin: * so we can call it directly.
-      // Dev uses the Vite proxy to avoid cookie/redirect quirks during development.
+      // Use the Netlify serverless proxy in production to ensure a clean JSON
+      // response regardless of Myfxbook's content-negotiation or UA restrictions.
       const myfxbookUrl = import.meta.env.DEV
         ? '/api/myfxbook/get-community-outlook.json'
-        : 'https://www.myfxbook.com/api/get-community-outlook.json';
+        : '/.netlify/functions/myfxbook';
       const res = await fetch(myfxbookUrl, { signal: AbortSignal.timeout(8000) });
 
       if (!res.ok) throw new Error(`myfxbook ${res.status}`);
@@ -950,7 +957,7 @@ export class MyfxbookSentimentProvider implements ISentimentProvider {
     try {
       const url = import.meta.env.DEV
         ? '/api/myfxbook/get-community-outlook.json'
-        : 'https://www.myfxbook.com/api/get-community-outlook.json';
+        : '/.netlify/functions/myfxbook';
       const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       return res.ok;
     } catch {
